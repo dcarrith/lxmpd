@@ -15,7 +15,7 @@
 * A custom exception class
 * @package MPD
 */
-class MPDException extends Exception {}
+//class MPDException extends Exception {}
 
 /**
 * A PHP class for controlling MPD
@@ -51,32 +51,32 @@ class LxMPD {
         const MPD_ERROR = 'ACK';
 
         // Connection and details
-        private static $_connection = null;
-        private static $_host = 'localhost';
-        private static $_port = 6600;
-        private static $_password = null;
-        private static $_version = '0';
+        private $_connection = null;
+        private $_host = 'localhost';
+        private $_port = 6600;
+        private $_password = null;
+        private $_version = '0';
 
 	// Variable to switch on and off debugging
-	private static $_debugging = false;
+	private $_debugging = false;
 
 	// Variable to track whether or not we're connected to MPD
-	public static $_connected = false;
+	public $_connected = false;
 
 	// Variable to store a list of commands for sending to MPD in bulk
-	private static $_commandQueue = "";
+	private $_commandQueue = "";
 
 	// Variable for storing properties available via PHP magic methods: __set(), __get(), __isset(), __unset()
-	private static $_data = array();
+	private $_data = array();
 
         // This is an array of commands whose output is expected to be an array
-        private static $_expectArrayOutput = array( 'commands', 'decoders', 'find', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'notcommands', 'lsinfo', 'outputs', 'playlist', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistsearch', 'plchanges', 'plchangesposid', 'search', 'tagtypes', 'urlhandlers' );
+        private $_expectArrayOutput = array( 'commands', 'decoders', 'find', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'notcommands', 'lsinfo', 'outputs', 'playlist', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistsearch', 'plchanges', 'plchangesposid', 'search', 'tagtypes', 'urlhandlers' );
       
 	// The output from these commands require special parsing  
-	private static $_specialCases = array( 'listplaylists', 'lsinfo', 'decoders' );
+	private $_specialCases = array( 'listplaylists', 'lsinfo', 'decoders' );
  
 	// This is an array of MPD commands that are available through the __call() magic method
-	private static $_commands = array( 'add', 'addid', 'clear', 'clearerror', 'close', 'commands', 'consume', 'count', 'crossfade', 'currentsong', 'decoders', 'delete', 'deleteid', 'disableoutput', 'enableoutput', 'find', 'findadd', 'idle', 'kill', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'load', 'lsinfo', 'mixrampdb', 'mixrampdelay', 'move', 'moveid', 'next', 'notcommands', 'outputs', 'password', 'pause', 'ping', 'play', 'playid', 'playlist', 'playlistadd', 'playlistclear', 'playlistdelete', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistmove', 'playlistsearch', 'plchanges', 'plchangesposid', 'previous', 'random', 'rename', 'repeat', 'replay_gain_mode', 'replay_gain_status', 'rescan', 'rm', 'save', 'search', 'seek', 'seekid', 'setvol', 'shuffle', 'single', 'stats', 'status', 'sticker', 'stop', 'swap', 'swapid', 'tagtypes', 'update', 'urlhandlers' );
+	private $_commands = array( 'add', 'addid', 'clear', 'clearerror', 'close', 'commands', 'consume', 'count', 'crossfade', 'currentsong', 'decoders', 'delete', 'deleteid', 'disableoutput', 'enableoutput', 'find', 'findadd', 'idle', 'kill', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'load', 'lsinfo', 'mixrampdb', 'mixrampdelay', 'move', 'moveid', 'next', 'notcommands', 'outputs', 'password', 'pause', 'ping', 'play', 'playid', 'playlist', 'playlistadd', 'playlistclear', 'playlistdelete', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistmove', 'playlistsearch', 'plchanges', 'plchangesposid', 'previous', 'random', 'rename', 'repeat', 'replay_gain_mode', 'replay_gain_status', 'rescan', 'rm', 'save', 'search', 'seek', 'seekid', 'setvol', 'shuffle', 'single', 'stats', 'status', 'sticker', 'stop', 'swap', 'swapid', 'tagtypes', 'update', 'urlhandlers' );
 
         /**
          * Set connection paramaters.
@@ -86,41 +86,41 @@ class LxMPD {
          * @return void
          */
         function __construct( $host = 'localhost', $port = 6600, $password = null ) {
-                self::$_host = $host;
-                self::$_port = $port;
-                self::$_password = $password;
+                $this->_host = $host;
+                $this->_port = $port;
+                $this->_password = $password;
         }
 
         /**
          * Connects to the MPD server
          * @return bool
          */
-        public static function connect() {
+        public function connect() {
                 // Check whether the socket is already connected
                 if( self::isConnected() ) {
                         return true;
                 }
 
                 // Open the socket
-                $connection = @fsockopen( self::$_host, self::$_port, $errn, $errs, 5 );
+                $connection = @fsockopen( $this->_host, $this->_port, $errn, $errs, 5 );
                 if( $connection == false ) {
-                        throw new MPDException( 'Connection failed: '.$errs, self::MPD_CONNECTION_FAILED );
+                        throw new Exception( 'Connection failed: '.$errs, self::MPD_CONNECTION_FAILED );
                 }
 
 		// Store the connection in a local variable
-                self::$_connection = $connection;
+                $this->_connection = $connection;
 
                 // Clear connection messages
-                while( !feof( self::$_connection ) ) {
-                        $response = trim( fgets( self::$_connection ) );
+                while( !feof( $this->_connection ) ) {
+                        $response = trim( fgets( $this->_connection ) );
                         // If the connection messages have cleared
                         if( strncmp( self::MPD_OK, $response, strlen( self::MPD_OK ) ) == 0 ) {
-                                self::$_connected = true;
+                                $this->_connected = true;
                                 // Read off MPD version
-                                list( self::$_version ) = sscanf( $response, self::MPD_OK . " MPD %s\n" );
+                                list( $this->_version ) = sscanf( $response, self::MPD_OK . " MPD %s\n" );
                                 // Send the connection password
-                                if( !is_null( self::$_password ) ) {
-                                        self::password( self::$_password );
+                                if( !is_null( $this->_password ) ) {
+                                        self::password( $this->_password );
                                 }
 				// Refresh all the status and statistics variables
 				self::RefreshInfo();
@@ -129,26 +129,26 @@ class LxMPD {
                         }
                         // Catch MPD errors on connection
                         if( strncmp( self::MPD_ERROR, $response, strlen( self::MPD_ERROR ) ) == 0 ) {
-                                self::$_connected = false;
+                                $this->_connected = false;
                                 preg_match( '/^ACK \[(.*?)\@(.*?)\] \{(.*?)\} (.*?)$/', $response, $matches );
-                                throw new MPDException( 'Connection failed: '.$matches[4], self::MPD_CONNECTION_FAILED );
+                                throw new Exception( 'Connection failed: '.$matches[4], self::MPD_CONNECTION_FAILED );
                                 return false;
                                 break;
                         }
                 }
-                throw new MPDException( 'Connection failed', self::MPD_CONNECTION_FAILED );
+                throw new Exception( 'Connection failed', self::MPD_CONNECTION_FAILED );
         }
 
         /**
          * Disconnects from the MPD server
          * @return bool
          */
-        public static function disconnect() {
-                if( !is_null( self::$_connection ) ) {
+        public function disconnect() {
+                if( !is_null( $this->_connection ) ) {
                         self::close();
-                        fclose( self::$_connection );
-                        self::$_connection = null;
-                        self::$_connected = false;
+                        fclose( $this->_connection );
+                        $this->_connection = null;
+                        $this->_connected = false;
                 }
                 return true;
         }
@@ -157,9 +157,9 @@ class LxMPD {
          * Checks whether the socket has connected
          * @return bool
          */
-        public static function isConnected() {
+        public function isConnected() {
 
-                return self::$_connected;
+                return $this->_connected;
         }
 
         /**
@@ -167,15 +167,15 @@ class LxMPD {
          * @param string $data The data to be written
          * @return bool
          */
-        private static function write( $data ) {
+        private function write( $data ) {
                 
 		if( !self::isConnected() ) {
                         self::connect();
                 }
 
-		if( !fputs( self::$_connection, "$data\n" ) ) {
-                //if( !fwrite( self::$_connection, $data."\r\n" ) ) {
-                        throw new MPDException( 'Failed to write to MPD socket', self::MPD_WRITE_FAILED );
+		if( !fputs( $this->_connection, "$data\n" ) ) {
+                //if( !fwrite( $this->_connection, $data."\r\n" ) ) {
+                        throw new Exception( 'Failed to write to MPD socket', self::MPD_WRITE_FAILED );
                         return false;
                 }
 
@@ -186,7 +186,7 @@ class LxMPD {
          * Reads data from the MPD socket
          * @return array Array of lines of data
          */
-        private static function read() {
+        private function read() {
 
                 // Check for a connection
                 if( !self::isConnected() ) {
@@ -195,14 +195,14 @@ class LxMPD {
 
                 // Set up output array and get stream information
                 $output = array();
-                $info = stream_get_meta_data( self::$_connection );
+                $info = stream_get_meta_data( $this->_connection );
 
                 // Wait for output to finish or time out
-                while( !feof( self::$_connection ) && !$info['timed_out'] ) {
+                while( !feof( $this->_connection ) && !$info['timed_out'] ) {
 
-                        $line = trim( fgets( self::$_connection ) );
+                        $line = trim( fgets( $this->_connection ) );
 
-			$info = stream_get_meta_data( self::$_connection );
+			$info = stream_get_meta_data( $this->_connection );
                         $matches = array();
 
                         // We get empty lines sometimes. Ignore them.
@@ -215,7 +215,7 @@ class LxMPD {
                                 break;
 
                         } else if( strncmp( self::MPD_ERROR, $line, strlen( self::MPD_ERROR ) ) == 0 && preg_match( '/^ACK \[(.*?)\@(.*?)\] \{(.*?)\} (.*?)$/', $line, $matches ) ) {
-                                throw new MPDException( 'Command failed: '.$matches[4], self::MPD_COMMAND_FAILED );
+                                throw new Exception( 'Command failed: '.$matches[4], self::MPD_COMMAND_FAILED );
                         
 			} else {
                         
@@ -226,11 +226,11 @@ class LxMPD {
                 if( $info['timed_out'] ) {
 
                         // I can't work out how to rescue a timed-out socket and get it working again. So just throw it away.
-                        fclose( self::$_connection );
-                        self::$_connection = null;
-                        self::$_connected = false;
+                        fclose( $this->_connection );
+                        $this->_connection = null;
+                        $this->_connected = false;
 
-                        throw new MPDException( 'Command timed out', self::MPD_TIMEOUT );
+                        throw new Exception( 'Command timed out', self::MPD_TIMEOUT );
 
                 } else {
 
@@ -245,7 +245,7 @@ class LxMPD {
          * @param int $timeout The script's timeout, in seconds
          * @return array Array of parsed output
          */
-        public static function runCommand( $command, $args = array(), $timeout = null ) {
+        public function runCommand( $command, $args = array(), $timeout = null ) {
 
 		/*if ($command == "lsinfo") {
 			var_dump($command);
@@ -276,11 +276,11 @@ class LxMPD {
                 // Set the timeout
                 if( is_int( $timeout ) ) {
 
-                        stream_set_timeout( self::$_connection, $timeout );
+                        stream_set_timeout( $this->_connection, $timeout );
 
                 } else if( is_float( $timeout ) ) {
 
-                        stream_set_timeout( self::$_connection, floor( $timeout ), round( ($timeout - floor( $timeout ))*1000000 ) );
+                        stream_set_timeout( $this->_connection, floor( $timeout ), round( ($timeout - floor( $timeout ))*1000000 ) );
                 }
 
                 // Read output
@@ -288,7 +288,7 @@ class LxMPD {
 
                 // Reset timeout
                 if( !is_null( $timeout ) ) {
-                        stream_set_timeout( self::$_connection, ini_get( 'default_socket_timeout' ) );
+                        stream_set_timeout( $this->_connection, ini_get( 'default_socket_timeout' ) );
                 }
 
                 // Return output
@@ -300,7 +300,7 @@ class LxMPD {
          * @param array $output The output from MPD
          * @return string|array
          */
-        private static function parseOutput( $output, $command = '' ) {
+        private function parseOutput( $output, $command = '' ) {
 
                 $parsedOutput = array();
 
@@ -318,12 +318,12 @@ class LxMPD {
                 if( count( $output ) == 0 ) {
 
                         // For some commands returning an empty array makes more sense than true
-                        return (in_array( $command, self::$_expectArrayOutput ))? array() : true;
+                        return (in_array( $command, $this->_expectArrayOutput ))? array() : true;
 
                 } else if( count( $output ) == 1 ) { // If there's only one line of output, just return the value
 
                         // Again, for some commands it makes sense to force $output to be an array, even if it contains only one value
-                        return (in_array( $command, self::$_expectArrayOutput ))? array( $output[0][1] ) : $output[0][1];
+                        return (in_array( $command, $this->_expectArrayOutput ))? array( $output[0][1] ) : $output[0][1];
                 }
 
                 /* The output we recieve will look like one of a few cases:
@@ -394,7 +394,7 @@ class LxMPD {
 		} else {*/
 
 		// Some output needs special handling
-		if (in_array($command, self::$_specialCases)) {
+		if (in_array($command, $this->_specialCases)) {
 
 			$parsedOutput = array();
 
@@ -478,7 +478,7 @@ class LxMPD {
 
                         // If we have a single collection, return it as a single object if we don't expect an array
                         if( count( $parsedOutput ) == 1 ) {
-                                return (in_array( $command, self::$_expectArrayOutput ))? $parsedOutput : $parsedOutput[0];
+                                return (in_array( $command, $this->_expectArrayOutput ))? $parsedOutput : $parsedOutput[0];
                         }
 
                         // If there's only one property in an object, then collapse it to just that value.
@@ -495,60 +495,60 @@ class LxMPD {
      	 *
 	 * NOTE: This function is automatically called upon Connect() as of v1.1.
 	 */
-	public static function RefreshInfo() {
+	public function RefreshInfo() {
         	
 		// Get the Server Statistics
-		self::$statistics = self::stats();
+		$this->statistics = self::stats();
         	
 		// Get the Server Status
-		self::$status = self::status();
+		$this->status = self::status();
         	
 		// Get the Playlist
-		self::$playlist = self::playlistinfo();
+		$this->playlist = self::playlistinfo();
 
 		// Get a count of how many tracks are in the playlist    		
-		self::$playlist_count = count( self::$playlist );
+		$this->playlist_count = count( $this->playlist );
 
         	// Let's store the state for easy access as a property
-		self::$state = self::$status['state'];
+		$this->state = $this->status['state'];
 		
-		if ( (self::$state == "play") || (self::$state == "pause") ) {
+		if ( ($this->state == "play") || ($this->state == "pause") ) {
 
-			self::$current_track_id = self::$status['song'];
-			list (self::$current_track_position, self::$current_track_length ) = explode(":", self::$status['time']);
+			$this->current_track_id = $this->status['song'];
+			list ($this->current_track_position, $this->current_track_length ) = explode(":", $this->status['time']);
 
 		} else {
 
-			self::$current_track_id = 0;
-			self::$current_track_position = 0;
-			self::$current_track_length = 0;
+			$this->current_track_id = 0;
+			$this->current_track_position = 0;
+			$this->current_track_length = 0;
 		}
 
 		// This stuff doesn't seem to exist anymore
-		self::$uptime 		= self::$statistics['uptime'];
-		self::$playtime 	= self::$statistics['playtime'];
+		$this->uptime 		= $this->statistics['uptime'];
+		$this->playtime 	= $this->statistics['playtime'];
 
 		// These status variables are simple integers
-		self::$repeat 		= self::$status['repeat'];
-		self::$random 		= self::$status['random'];
-		self::$single 		= self::$status['single'];
-		self::$consume 		= self::$status['consume'];
-		self::$volume 		= self::$status['volume'];
+		$this->repeat 		= $this->status['repeat'];
+		$this->random 		= $this->status['random'];
+		$this->single 		= $this->status['single'];
+		$this->consume 		= $this->status['consume'];
+		$this->volume 		= $this->status['volume'];
 
 		// Adding some new fields that are reported on in the RefreshInfo results
-		self::$playlist_id 	= ( isset(self::$status['playlist']) 		? self::$status['playlist'] : 		'' );
-		self::$playlist_length 	= ( isset(self::$status['playlist_length']) 	? self::$status['playlist_length'] : 	'' );
-		self::$song 		= ( isset(self::$status['song']) 		? self::$status['song'] : 		'' );
-		self::$songid 		= ( isset(self::$status['songid']) 		? self::$status['songid'] : 		'' );
-		self::$nextsong 	= ( isset(self::$status['nextsong']) 		? self::$status['nextsong'] : 		'' );
-		self::$nextsongid 	= ( isset(self::$status['nextsongid']) 		? self::$status['nextsongid'] : 	'' );
-		self::$time 		= ( isset(self::$status['time']) 		? self::$status['time'] : 		'' );
-		self::$elapsed		= ( isset(self::$status['elapsed'])		? self::$status['elapsed'] : 		'' );
-		self::$bitrate 		= ( isset(self::$status['bitrate']) 		? self::$status['bitrate'] : 		'' );
-		self::$xfade 		= ( isset(self::$status['xfade']) 		? self::$status['xfade'] : 		'' );
-		self::$mixrampdb 	= ( isset(self::$status['mixrampdb']) 		? self::$status['mixrampdb'] : 		'' );
-		self::$mixrampdelay 	= ( isset(self::$status['mixrampdelay']) 	? self::$status['mixrampdelay'] : 	'' );
-		self::$audio	 	= ( isset(self::$status['audio']) 		? self::$status['audio'] : 		'' );
+		$this->playlist_id 	= ( isset($this->status['playlist']) 		? $this->status['playlist'] : 		'' );
+		$this->playlist_length 	= ( isset($this->status['playlist_length']) 	? $this->status['playlist_length'] : 	'' );
+		$this->song 		= ( isset($this->status['song']) 		? $this->status['song'] : 		'' );
+		$this->songid 		= ( isset($this->status['songid']) 		? $this->status['songid'] : 		'' );
+		$this->nextsong 	= ( isset($this->status['nextsong']) 		? $this->status['nextsong'] : 		'' );
+		$this->nextsongid 	= ( isset($this->status['nextsongid']) 		? $this->status['nextsongid'] : 	'' );
+		$this->time 		= ( isset($this->status['time']) 		? $this->status['time'] : 		'' );
+		$this->elapsed		= ( isset($this->status['elapsed'])		? $this->status['elapsed'] : 		'' );
+		$this->bitrate 		= ( isset($this->status['bitrate']) 		? $this->status['bitrate'] : 		'' );
+		$this->xfade 		= ( isset($this->status['xfade']) 		? $this->status['xfade'] : 		'' );
+		$this->mixrampdb 	= ( isset($this->status['mixrampdb']) 		? $this->status['mixrampdb'] : 		'' );
+		$this->mixrampdelay 	= ( isset($this->status['mixrampdelay']) 	? $this->status['mixrampdelay'] : 	'' );
+		$this->audio	 	= ( isset($this->status['audio']) 		? $this->status['audio'] : 		'' );
 
 		return true;
 	}
@@ -559,28 +559,28 @@ class LxMPD {
 	 * as many commands as needed, and are sent all at once, in the order they are queued, using
 	 * the SendCommandQueue() method. The syntax for queueing commands is identical to SendCommand(). 
 	 */
-	public static function QueueCommand($cmdStr, $arg1 = "", $arg2 = "") {
+	public function QueueCommand($cmdStr, $arg1 = "", $arg2 = "") {
 
-		if ( self::$_debugging ) echo "mpd->QueueCommand() / cmd: ".$cmdStr.", args: ".$arg1." ".$arg2."\n";
+		if ( $this->_debugging ) echo "mpd->QueueCommand() / cmd: ".$cmdStr.", args: ".$arg1." ".$arg2."\n";
 
-		if ( ! self::$_connected ) {
+		if ( ! $this->_connected ) {
 
 			echo "mpd->QueueCommand() / Error: Not connected\n";
 			return null;
 
 		} else {
 
-			if ( strlen(self::$_commandQueue) == 0 ) {
+			if ( strlen($this->_commandQueue) == 0 ) {
 
-				self::$_commandQueue = "command_list_begin" . "\n";
+				$this->_commandQueue = "command_list_begin" . "\n";
 			}
 
 			if (strlen($arg1) > 0) $cmdStr .= " \"$arg1\"";
 			if (strlen($arg2) > 0) $cmdStr .= " \"$arg2\"";
 
-			self::$_commandQueue .= $cmdStr ."\n";
+			$this->_commandQueue .= $cmdStr ."\n";
 
-			if ( self::$_debugging ) echo "mpd->QueueCommand() / return\n";
+			if ( $this->_debugging ) echo "mpd->QueueCommand() / return\n";
 		}
 		return true;
 	}
@@ -589,27 +589,27 @@ class LxMPD {
 	 *
 	 * Sends all commands in the Command Queue to the MPD server. See also QueueCommand().
 	 */
-	public static function SendCommandQueue() {
+	public function SendCommandQueue() {
 
-		if ( self::$_debugging ) echo "mpd->SendCommandQueue()\n";
+		if ( $this->_debugging ) echo "mpd->SendCommandQueue()\n";
 
-		if ( ! self::$_connected ) {
+		if ( ! $this->_connected ) {
 
 			echo "mpd->SendCommandQueue() / Error: Not connected\n";
 			return null;
 
 		} else {
 
-			self::$_commandQueue .= "command_list_end" . "\n";
+			$this->_commandQueue .= "command_list_end" . "\n";
 
-			if ( is_null( $respStr = self::runCommand( self::$_commandQueue ))) {
+			if ( is_null( $respStr = self::runCommand( $this->_commandQueue ))) {
 
 				return null;
 
 			} else {
 
-				self::$_commandQueue = null;
-				if ( self::$_debugging ) echo "mpd->SendCommandQueue() / response: '".$respStr."'\n";
+				$this->_commandQueue = null;
+				if ( $this->_debugging ) echo "mpd->SendCommandQueue() / response: '".$respStr."'\n";
 			}
 		}
 
@@ -622,9 +622,9 @@ class LxMPD {
 	 * of tracks to add, to the end of the playlist. This is used to add many, many tracks to 
 	 * the playlist in one swoop.
 	 */
-	public static function PLAddBulk($trackArray) {
+	public function PLAddBulk($trackArray) {
 
-		if ( self::$_debugging ) echo "mpd->PLAddBulk()\n";
+		if ( $this->_debugging ) echo "mpd->PLAddBulk()\n";
 
 		$numFiles = count($trackArray);
 
@@ -636,20 +636,20 @@ class LxMPD {
 
 		self::RefreshInfo();
 
-		if ( self::$_debugging ) echo "mpd->PLAddBulk() / return\n";
+		if ( $this->_debugging ) echo "mpd->PLAddBulk() / return\n";
 
 		return $resp;
 	}
 
 
-	public static function GetFirstTrack( $scope_key = "album", $scope_value = null) {
+	public function GetFirstTrack( $scope_key = "album", $scope_value = null) {
 
 		$album = self::find( "album", $scope_value );
 
 		return $album[0]['file'];
 	}
 
-	public static function GetPlaylists() {
+	public function GetPlaylists() {
 
 		if ( is_null( $resp = self::SendCommand( "lsinfo" ))) return NULL;
         	
@@ -679,23 +679,23 @@ class LxMPD {
 	 * Sends a generic command to the MPD server. Several command constants are pre-defined for 
 	 * use (see MPD_CMD_* constant definitions above). 
 	 */
-	public static function SendCommand( $cmdStr, $arg1 = "", $arg2 = "", $arg3 = "" ) {
-		if ( ! self::$_connected ) {
+	public function SendCommand( $cmdStr, $arg1 = "", $arg2 = "", $arg3 = "" ) {
+		if ( ! $this->_connected ) {
 			echo "mpd->SendCommand() / Error: Not connected\n";
 		} else {
 			// Clear out the error String
-			self::$errStr = "";
+			$this->errStr = "";
 			$respStr = "";
 
 			if (strlen($arg1) > 0) $cmdStr .= " \"$arg1\"";
 			if (strlen($arg2) > 0) $cmdStr .= " \"$arg2\"";
 			if (strlen($arg3) > 0) $cmdStr .= " \"$arg3\"";
 
-			fputs( self::$_connection,"$cmdStr\n" );
+			fputs( $this->_connection,"$cmdStr\n" );
 
-			while( !feof( self::$_connection )) {
+			while( !feof( $this->_connection )) {
 
-				$response = fgets( self::$_connection,1024 );
+				$response = fgets( $this->_connection,1024 );
 
 				// An OK signals the end of transmission -- we'll ignore it
 				if ( strncmp( "OK", $response,strlen( "OK" )) == 0 ) {
@@ -705,10 +705,10 @@ class LxMPD {
 				// An ERR signals the end of transmission with an error! Let's grab the single-line message.
 				if ( strncmp( "ACK", $response, strlen( "ACK" )) == 0 ) {
 					list ( $junk, $errTmp ) = explode("ACK" . " ",$response );
-					self::$errStr = strtok( $errTmp,"\n" );
+					$this->errStr = strtok( $errTmp,"\n" );
 				}
 
-				if ( strlen( self::$errStr ) > 0 ) {
+				if ( strlen( $this->errStr ) > 0 ) {
 					return NULL;
 				}
 
@@ -724,11 +724,11 @@ class LxMPD {
          * @param array $subsystems An array of particular subsystems to watch
          * @return string|array
          */
-        public static function idle( $subsystems = array() ) {
+        public function idle( $subsystems = array() ) {
                 
 		return self::runCommand( 'idle', $subsystems, 1800 );
 
-		//$idle = self::$runCommand( 'idle', $subsystems, 1800 );
+		//$idle = $this->runCommand( 'idle', $subsystems, 1800 );
                 // When two subsystems are changed, only one is printed before the OK
                 // line. Anyone repeatedly polling a PHP script to simulate continuous
                 // listening will miss events as MPD creates a new 'client' on every
@@ -747,8 +747,8 @@ class LxMPD {
                 // changed systems without slowing down the script too much.
                 // This works reasonably well, but YMMV.
                 /*$idleArray = array( $idle );
-                if( stream_is_local( self::$_connection ) || self::$_host == 'localhost' ) {
-                        try { while( 1 ) { array_push( $idleArray, self::$runCommand( 'idle', $subsystems, 0.1 ) ); } }
+                if( stream_is_local( $this->_connection ) || $this->_host == 'localhost' ) {
+                        try { while( 1 ) { array_push( $idleArray, $this->runCommand( 'idle', $subsystems, 0.1 ) ); } }
                         catch( MPDException $e ) { ; }
                 }
                 return (count( $idleArray ) == 1)? $idleArray[0] : $idleArray;*/
@@ -759,16 +759,16 @@ class LxMPD {
 	 *
 	 */
  
-        public static function __call( $name, $arguments ) {
-                if( in_array( $name, self::$_commands ) ) {
+        public function __call( $name, $arguments ) {
+                if( in_array( $name, $this->_commands ) ) {
                         return self::runCommand( $name, $arguments );
                 }
         }
 
-	public static function __get($name) {
+	public function __get($name) {
 
-		if ( array_key_exists( $name, self::$_data )) {
-			return self::$_data[$name];
+		if ( array_key_exists( $name, $this->_data )) {
+			return $this->_data[$name];
 		}
 
 		$trace = debug_backtrace();
@@ -781,15 +781,15 @@ class LxMPD {
 		return null;
 	}
 
-	public static function __set( $name, $value ) {
-		self::$_data[$name] = $value;
+	public function __set( $name, $value ) {
+		$this->_data[$name] = $value;
 	}
 
-	public static function __isset( $name ) {
-		return isset( self::$_data[$name] );
+	public function __isset( $name ) {
+		return isset( $this->_data[$name] );
 	}
 
-	public static function __unset( $name ) {
-		unset( self::$_data[$name] );
+	public function __unset( $name ) {
+		unset( $this->_data[$name] );
 	}
 }
