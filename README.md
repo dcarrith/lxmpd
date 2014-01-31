@@ -1,4 +1,4 @@
-lxmpd
-=====
+cifirephp
+=========
 
-Laravel wrapper for a xMPD class
+Composer package containing the Laravel-ized xMPD class
