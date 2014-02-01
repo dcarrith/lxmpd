@@ -1,21 +1,9 @@
 <?php namespace Dcarrith\LxMPD;
 /**
 * MPD.php: A PHP class for controlling MPD
-*
-* @author Robert Wallis <bob.wallis@gmail.com>
-* @copyright Copyright (c) 2011, Robert Wallis
-* @license http://www.opensource.org/licenses/gpl-3.0 GPLv3
-* @link https://github.com/bobwallis/phpMPD Project Page
-* @link http://www.musicpd.org/doc/protocol/ MPD Protocol Documentation
-* @example /examples/example.php Examples of how to use this class
-* @package MPD
 */
 
-/**
-* A custom exception class
-* @package MPD
-*/
-//class MPDException extends Exception {}
+use Dcarrith\LxMPD\Exception\MPDException as MPDException; 
 
 /**
 * A PHP class for controlling MPD
@@ -104,7 +92,7 @@ class LxMPD {
                 // Open the socket
                 $connection = @fsockopen( $this->_host, $this->_port, $errn, $errs, 5 );
                 if( $connection == false ) {
-                        throw new Exception( 'Connection failed: '.$errs, self::MPD_CONNECTION_FAILED );
+                        throw new MPDException( 'Connection failed: '.$errs, self::MPD_CONNECTION_FAILED );
                 }
 
 		// Store the connection in a local variable
@@ -131,12 +119,12 @@ class LxMPD {
                         if( strncmp( self::MPD_ERROR, $response, strlen( self::MPD_ERROR ) ) == 0 ) {
                                 $this->_connected = false;
                                 preg_match( '/^ACK \[(.*?)\@(.*?)\] \{(.*?)\} (.*?)$/', $response, $matches );
-                                throw new Exception( 'Connection failed: '.$matches[4], self::MPD_CONNECTION_FAILED );
+                                throw new MPDException( 'Connection failed: '.$matches[4], self::MPD_CONNECTION_FAILED );
                                 return false;
                                 break;
                         }
                 }
-                throw new Exception( 'Connection failed', self::MPD_CONNECTION_FAILED );
+                throw new MPDException( 'Connection failed', self::MPD_CONNECTION_FAILED );
         }
 
         /**
@@ -175,7 +163,7 @@ class LxMPD {
 
 		if( !fputs( $this->_connection, "$data\n" ) ) {
                 //if( !fwrite( $this->_connection, $data."\r\n" ) ) {
-                        throw new Exception( 'Failed to write to MPD socket', self::MPD_WRITE_FAILED );
+                        throw new MPDException( 'Failed to write to MPD socket', self::MPD_WRITE_FAILED );
                         return false;
                 }
 
@@ -215,7 +203,7 @@ class LxMPD {
                                 break;
 
                         } else if( strncmp( self::MPD_ERROR, $line, strlen( self::MPD_ERROR ) ) == 0 && preg_match( '/^ACK \[(.*?)\@(.*?)\] \{(.*?)\} (.*?)$/', $line, $matches ) ) {
-                                throw new Exception( 'Command failed: '.$matches[4], self::MPD_COMMAND_FAILED );
+                                throw new MPDException( 'Command failed: '.$matches[4], self::MPD_COMMAND_FAILED );
                         
 			} else {
                         
@@ -230,7 +218,7 @@ class LxMPD {
                         $this->_connection = null;
                         $this->_connected = false;
 
-                        throw new Exception( 'Command timed out', self::MPD_TIMEOUT );
+                        throw new MPDException( 'Command timed out', self::MPD_TIMEOUT );
 
                 } else {
 
