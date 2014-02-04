@@ -203,7 +203,7 @@ class LxMPD {
                                 break;
 
                         } else if( strncmp( self::MPD_ERROR, $line, strlen( self::MPD_ERROR ) ) == 0 && preg_match( '/^ACK \[(.*?)\@(.*?)\] \{(.*?)\} (.*?)$/', $line, $matches ) ) {
-                                throw new MPDException( 'Command failed: '.$matches[4], self::MPD_COMMAND_FAILED );
+                                throw new MPDException( 'Command failed: '.$line, self::MPD_COMMAND_FAILED );
                         
 			} else {
                         
@@ -235,7 +235,7 @@ class LxMPD {
          */
         public function runCommand( $command, $args = array(), $timeout = null ) {
 
-		/*if ($command == "lsinfo") {
+		/*if ($command == "add") {
 			var_dump($command);
 			var_dump($args);
 		}*/
@@ -257,6 +257,12 @@ class LxMPD {
 				$toWrite .= ' "'.str_replace( '"', '\"', strval( $arg ) ) .'"';
                 	}
 		}
+
+		/*if ($command == "add") {
+
+			var_dump($toWrite);
+			exit();
+		}*/
 
                 // Write command to MPD socket
                 self::write( $toWrite );
@@ -389,12 +395,22 @@ class LxMPD {
 			switch($command) {
 
 				case 'listplaylists' :
-					
+
+					$lastModifiedData = array();
+					$lastKey = 0;
+	
 					foreach($output as $key => $value) {
 
 						if ($value[0] == "playlist") {
-							$parsedOutput = $value[1];
-						}
+
+							$parsedOutput[]["name"] = $value[1];
+					
+						} else if ($value[0] == "Last-Modified") {
+						
+							$parsedOutput[$lastKey]["modified"] = $value[1];		
+
+							$lastKey++;
+						}							
 					}
 
 					break;
