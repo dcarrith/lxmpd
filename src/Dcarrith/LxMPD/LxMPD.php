@@ -85,7 +85,7 @@ class LxMPD {
          */
         public function connect() {
                 // Check whether the socket is already connected
-                if( self::isConnected() ) {
+                if( $this->isConnected() ) {
                         return true;
                 }
 
@@ -108,10 +108,10 @@ class LxMPD {
                                 list( $this->_version ) = sscanf( $response, self::MPD_OK . " MPD %s\n" );
                                 // Send the connection password
                                 if( !is_null( $this->_password ) ) {
-                                        self::password( $this->_password );
+                                        $this->password( $this->_password );
                                 }
 				// Refresh all the status and statistics variables
-				self::RefreshInfo();
+				$this->RefreshInfo();
                                 return true;
                                 break;
                         }
@@ -133,7 +133,7 @@ class LxMPD {
          */
         public function disconnect() {
                 if( !is_null( $this->_connection ) ) {
-                        self::close();
+                        $this->close();
                         fclose( $this->_connection );
                         $this->_connection = null;
                         $this->_connected = false;
@@ -157,8 +157,8 @@ class LxMPD {
          */
         private function write( $data ) {
                 
-		if( !self::isConnected() ) {
-                        self::connect();
+		if( !$this->isConnected() ) {
+                        $this->connect();
                 }
 
 		if( !fputs( $this->_connection, "$data\n" ) ) {
@@ -177,8 +177,8 @@ class LxMPD {
         private function read() {
 
                 // Check for a connection
-                if( !self::isConnected() ) {
-                        self::connect();
+                if( !$this->isConnected() ) {
+                        $this->connect();
                 }
 
                 // Set up output array and get stream information
@@ -265,7 +265,7 @@ class LxMPD {
 		}*/
 
                 // Write command to MPD socket
-                self::write( $toWrite );
+                $this->write( $toWrite );
 
                 // Set the timeout
                 if( is_int( $timeout ) ) {
@@ -278,7 +278,7 @@ class LxMPD {
                 }
 
                 // Read output
-                $output = self::read();
+                $output = $this->read();
 
                 // Reset timeout
                 if( !is_null( $timeout ) ) {
@@ -286,7 +286,7 @@ class LxMPD {
                 }
 
                 // Return output
-                return self::parseOutput( $output, $command );
+                return $this->parseOutput( $output, $command );
         }
 
         /**
@@ -502,13 +502,13 @@ class LxMPD {
 	public function RefreshInfo() {
         	
 		// Get the Server Statistics
-		$this->statistics = self::stats();
+		$this->statistics = $this->stats();
         	
 		// Get the Server Status
-		$this->status = self::status();
+		$this->status = $this->status();
         	
 		// Get the Playlist
-		$this->playlist = self::playlistinfo();
+		$this->playlist = $this->playlistinfo();
 
 		// Get a count of how many tracks are in the playlist    		
 		$this->playlist_count = count( $this->playlist );
@@ -606,7 +606,7 @@ class LxMPD {
 
 			$this->_commandQueue .= "command_list_end" . "\n";
 
-			if ( is_null( $respStr = self::runCommand( $this->_commandQueue ))) {
+			if ( is_null( $respStr = $this->runCommand( $this->_commandQueue ))) {
 
 				return null;
 
@@ -633,12 +633,12 @@ class LxMPD {
 		$numFiles = count($trackArray);
 
 		for ( $i = 0; $i < $numFiles; $i++ ) {
-			self::QueueCommand("add", $trackArray[$i]);
+			$this->QueueCommand("add", $trackArray[$i]);
 		}
 
-		$resp = self::SendCommandQueue();
+		$resp = $this->SendCommandQueue();
 
-		self::RefreshInfo();
+		$this->RefreshInfo();
 
 		if ( $this->_debugging ) echo "mpd->PLAddBulk() / return\n";
 
@@ -648,14 +648,14 @@ class LxMPD {
 
 	public function GetFirstTrack( $scope_key = "album", $scope_value = null) {
 
-		$album = self::find( "album", $scope_value );
+		$album = $this->find( "album", $scope_value );
 
 		return $album[0]['file'];
 	}
 
 	public function GetPlaylists() {
 
-		if ( is_null( $resp = self::SendCommand( "lsinfo" ))) return NULL;
+		if ( is_null( $resp = $this->SendCommand( "lsinfo" ))) return NULL;
         	
 		$playlistsArray = array();
         	$playlistLine = strtok($resp,"\n");
@@ -730,7 +730,7 @@ class LxMPD {
          */
         public function idle( $subsystems = array() ) {
                 
-		return self::runCommand( 'idle', $subsystems, 1800 );
+		return $this->runCommand( 'idle', $subsystems, 1800 );
 
 		//$idle = $this->runCommand( 'idle', $subsystems, 1800 );
                 // When two subsystems are changed, only one is printed before the OK
@@ -765,7 +765,7 @@ class LxMPD {
  
         public function __call( $name, $arguments ) {
                 if( in_array( $name, $this->_commands ) ) {
-                        return self::runCommand( $name, $arguments );
+                        return $this->runCommand( $name, $arguments );
                 }
         }
 
