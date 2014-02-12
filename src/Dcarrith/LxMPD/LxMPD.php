@@ -769,8 +769,12 @@ class LxMPD { //extends \Thread {
 			( $this->_host == 'localhost' ) 	     || 
 			( $this->_host == '127.0.0.1' )) {
 
+			$this->_local = true;
+
 			return true;
 		}
+
+		$this->_local = false;
 
 		return false;
 	}
