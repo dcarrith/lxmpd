@@ -106,8 +106,20 @@ class LxMPD { //extends \Thread {
                 $this->_port = $port;
                 $this->_password = $password;
 
-		// Set the timeout to whatever is set as the php default
-		$this->_timeout = ini_get( 'default_socket_timeout' );
+		// Determine if the connection is local based on host
+		$this->determineIfLocal();
+
+		// If the connection is local, then we can set the timeout to something small
+		if( $this->isLocal() ) {
+
+			// Set the timeout to whatever is set as the php default
+			$this->_timeout = 1;
+
+		} else {
+	
+			// Set the timeout to whatever is set as the php default
+			$this->_timeout = ini_get( 'default_socket_timeout' );
+		}
 
 		// We will need this in order to determine when we've parsed each track from a playlist
 		$this->_trackElementsChecklist = array_fill_keys( array_merge( $this->_essentialMPDTags, $this->_essentialID3Tags ), 0 );	
@@ -142,12 +154,7 @@ class LxMPD { //extends \Thread {
 				// Successully connected
                                 $this->_connected = true;
 
-				// The default is to assume MPD is remote from the web server, but if it's local, we want to make a note of it
-				if ( $this->isLocal( $this->_connection, $this->_host )) {
-					$this->_local = true;
-				}
-
-                                // Parse the MPD version from the response and replace the ending 0 with an x since it seems to only report major versions
+                                // Parse the MPD version from the response and replace the ending 0 with an xs
                                 $this->_version = preg_replace('/[0]$/','x', current( sscanf( $response, self::MPD_OK . " MPD %s\n" )));
 
                                 // Send the connection password
@@ -741,19 +748,26 @@ class LxMPD { //extends \Thread {
 
                 return $this->_connected;
         }
+	
+	/**
+         * Checks whether MPD is connected locally
+         * @return bool
+         */
+        public function isLocal() {
+
+                return $this->_local;
+        }
 
 	/**
-	 * isLocal tries to determine if the connection to MPD is local
-	 * @param connection resource
-	 * @param host string 
+	 * determineIfLocal tries to determine if the connection to MPD is local
 	 * @return bool
 	 */
-	public function isLocal( $connection, $host ) {
+	public function determineIfLocal() {
 
-		if( 	( stream_is_local( $connection ))    || 
-			( $host == (isset($_SERVER["SERVER_ADDR"]) ? $_SERVER["SERVER_ADDR"] : $host )) ||
-			( $host == 'localhost' ) 	     || 
-			( $host == '127.0.0.1' )) {
+		if( 	( stream_is_local( $this->_connection ))    || 
+			( $this->_host == (isset($_SERVER["SERVER_ADDR"]) ? $_SERVER["SERVER_ADDR"] : getHostByName( getHostName() ))) ||
+			( $this->_host == 'localhost' ) 	     || 
+			( $this->_host == '127.0.0.1' )) {
 
 			return true;
 		}
