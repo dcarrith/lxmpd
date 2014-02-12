@@ -74,10 +74,30 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      *
      * @test
      */
-    public function setRepeatTest()
+    public function turnRepeatOnTest()
     {
 
 	$repeat = 1;
+	
+	// Try to turn on repeat
+	$this->LxMPD->repeat($repeat);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if repeat is equal to what we set it to above
+        $this->assertEquals($repeat, $status['repeat']);
+    }
+
+    /**
+     * Test turning off repeat
+     *
+     * @test
+     */
+    public function turnRepeatOffTest()
+    {
+
+	$repeat = 0;
 	
 	// Try to turn on repeat
 	$this->LxMPD->repeat($repeat);
@@ -94,10 +114,31 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      *
      * @test
      */
-    public function setRandomTest()
+    public function turnRandomOnTest()
     {
 
 	$random = 1;
+	
+	// Try to turn on random
+	$this->LxMPD->random($random);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if random is equal to what we set it to above
+        $this->assertEquals($random, $status['random']);
+    }
+
+
+    /**
+     * Test turning off random
+     *
+     * @test
+     */
+    public function turnRandomOffTest()
+    {
+
+	$random = 0;
 	
 	// Try to turn on random
 	$this->LxMPD->random($random);
@@ -114,10 +155,30 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      *
      * @test
      */
-    public function setSingleTest()
+    public function turnSingleOnTest()
     {
 
 	$single = 1;
+	
+	// Try to turn on single
+	$this->LxMPD->single($single);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if single is equal to what we set it to above
+        $this->assertEquals($single, $status['single']);
+    }
+
+    /**
+     * Test turning off single
+     *
+     * @test
+     */
+    public function turnSingleOffTest()
+    {
+
+	$single = 0;
 	
 	// Try to turn on single
 	$this->LxMPD->single($single);
@@ -134,10 +195,30 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      *
      * @test
      */
-    public function setConsumeTest()
+    public function turnConsumeOnTest()
     {
 
 	$consume = 1;
+	
+	// Try to turn on consume
+	$this->LxMPD->consume($consume);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if consume is equal to what we set it to above
+        $this->assertEquals($consume, $status['consume']);
+    }
+
+    /**
+     * Test turning consume off
+     *
+     * @test
+     */
+    public function turnConsumeOffTest()
+    {
+
+	$consume = 0;
 	
 	// Try to turn on consume
 	$this->LxMPD->consume($consume);
@@ -156,8 +237,20 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      */
     /*public function setVolumeTest()
     {
-
+	// Default it to four
 	$volume = 4;
+	
+	// Try to set the volume
+	$this->LxMPD->volume($volume);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if volume is equal to what we set it to above
+        $this->assertEquals($volume, $status['volume']);
+
+	// Increment volume
+	$volume++;
 	
 	// Try to set the volume
 	$this->LxMPD->volume($volume);
@@ -176,8 +269,20 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      */
     public function setCrossfadeTest()
     {
-
+	// Default it to five
 	$crossfade = 5;
+	
+	// Try to set the crossfade
+	$this->LxMPD->crossfade($crossfade);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if crossfade is equal to what we set it to above
+        $this->assertEquals($crossfade, $status['xfade']);
+
+	// Increment crossfade
+	$crossfade++;
 	
 	// Try to set the crossfade
 	$this->LxMPD->crossfade($crossfade);
@@ -196,9 +301,21 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      */
     public function setMixRampDBTest()
     {
-
+	// Default it to six
 	$mixrampdb = 6;
 	
+	// Try to set the mixrampdb
+	$this->LxMPD->mixrampdb($mixrampdb);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if mixrampdb is equal to what we set it to above
+        $this->assertEquals($mixrampdb, $status['mixrampdb']);
+
+	// Increment mixrampdb
+	$mixrampdb++;
+
 	// Try to set the mixrampdb
 	$this->LxMPD->mixrampdb($mixrampdb);
 
@@ -216,8 +333,20 @@ class SetMPDPropertiesTest extends \Orchestra\Testbench\TestCase
      */
     public function setMixRampDelayTest()
     {
-
+	// Default it to seven
 	$mixrampdelay = 7;
+	
+	// Try to set the mixrampdelay
+	$this->LxMPD->mixrampdelay($mixrampdelay);
+
+	// Retrieve the stats so we can check the values
+	$status = $this->LxMPD->status();
+
+	// Check if mixrampdelay is equal to what we set it to above
+        $this->assertEquals($mixrampdelay, $status['mixrampdelay']);
+
+	// Increment mixrampdelay
+	$mixrampdelay++;
 	
 	// Try to set the mixrampdelay
 	$this->LxMPD->mixrampdelay($mixrampdelay);

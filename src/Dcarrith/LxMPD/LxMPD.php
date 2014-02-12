@@ -343,6 +343,13 @@ class LxMPD { //extends \Thread {
 		//var_dump( $args );
 		//var_dump( $output );		
 
+		/*if( strlen($command) > 1000 ) {
+
+			var_dump($command);
+			var_dump($args);
+			var_dump($output);
+		}*/
+
 		if( !count($output) ) {
 			return $parsedOutput;
 		}
@@ -702,174 +709,8 @@ class LxMPD { //extends \Thread {
 
 		return true;
 	}
-
-	/* QueueCommand() 
-	 *
-	 * Queues a generic command for later sending to the MPD server. The CommandQueue can hold 
-	 * as many commands as needed, and are sent all at once, in the order they are queued, using
-	 * the SendCommandQueue() method. The syntax for queueing commands is identical to SendCommand(). 
-	 */
-	public function QueueCommand($cmdStr, $arg1 = "", $arg2 = "") {
-
-		if ( $this->_debugging ) echo "mpd->QueueCommand() / cmd: ".$cmdStr.", args: ".$arg1." ".$arg2."\n";
-
-		if ( ! $this->_connected ) {
-
-			echo "mpd->QueueCommand() / Error: Not connected\n";
-			return null;
-
-		} else {
-
-			if ( strlen($this->_commandQueue) == 0 ) {
-
-				$this->_commandQueue = "command_list_begin" . "\n";
-			}
-
-			if (strlen($arg1) > 0) $cmdStr .= " \"$arg1\"";
-			if (strlen($arg2) > 0) $cmdStr .= " \"$arg2\"";
-
-			$this->_commandQueue .= $cmdStr ."\n";
-
-			if ( $this->_debugging ) echo "mpd->QueueCommand() / return\n";
-		}
-		return true;
-	}
-
-	/* SendCommandQueue() 
-	 *
-	 * Sends all commands in the Command Queue to the MPD server. See also QueueCommand().
-	 */
-	public function SendCommandQueue() {
-
-		if ( $this->_debugging ) echo "mpd->SendCommandQueue()\n";
-
-		if ( ! $this->_connected ) {
-
-			echo "mpd->SendCommandQueue() / Error: Not connected\n";
-			return null;
-
-		} else {
-
-			$this->_commandQueue .= "command_list_end" . "\n";
-
-			if ( is_null( $respStr = $this->runCommand( $this->_commandQueue ))) {
-
-				return null;
-
-			} else {
-
-				$this->_commandQueue = null;
-				if ( $this->_debugging ) echo "mpd->SendCommandQueue() / response: '".$respStr."'\n";
-			}
-		}
-
-		return $respStr;
-	}
-
-	/* PLAddBulk() 
-	 * 
-     	 * Adds each track listed in a single-dimensional <trackArray>, which contains filenames 
-	 * of tracks to add, to the end of the playlist. This is used to add many, many tracks to 
-	 * the playlist in one swoop.
-	 */
-	public function PLAddBulk($trackArray) {
-
-		if ( $this->_debugging ) echo "mpd->PLAddBulk()\n";
-
-		$numFiles = count($trackArray);
-
-		for ( $i = 0; $i < $numFiles; $i++ ) {
-			$this->QueueCommand("add", $trackArray[$i]);
-		}
-
-		$resp = $this->SendCommandQueue();
-
-		$this->RefreshInfo();
-
-		if ( $this->_debugging ) echo "mpd->PLAddBulk() / return\n";
-
-		return $resp;
-	}
-
-
-	public function GetFirstTrack( $scope_key = "album", $scope_value = null) {
-
-		$album = $this->find( "album", $scope_value );
-
-		return $album[0]['file'];
-	}
-
-	public function GetPlaylists() {
-
-		if ( is_null( $resp = $this->SendCommand( "lsinfo" ))) return NULL;
-        	
-		$playlistsArray = array();
-        	$playlistLine = strtok($resp,"\n");
-        	$playlistName = "";
-        	$playlistCounter = -1;
-
-        	while ( $playlistLine ) {
-
-            		list ( $element, $value ) = explode(": ",$playlistLine);
-
-            		if ( $element == "playlist" ) {
-            			$playlistCounter++;
-            			$playlistName = $value;
-            			$playlistsArray[$playlistCounter] = $playlistName;
-            		}
-
-            		$playlistLine = strtok("\n");
-        	}
-
-        	return $playlistsArray;
-	}
-
-	/* SendCommand()
-	 * 
-	 * Sends a generic command to the MPD server. Several command constants are pre-defined for 
-	 * use (see MPD_CMD_* constant definitions above). 
-	 */
-	public function SendCommand( $cmdStr, $arg1 = "", $arg2 = "", $arg3 = "" ) {
-		if ( ! $this->_connected ) {
-			echo "mpd->SendCommand() / Error: Not connected\n";
-		} else {
-			// Clear out the error String
-			$this->errStr = "";
-			$respStr = "";
-
-			if (strlen($arg1) > 0) $cmdStr .= " \"$arg1\"";
-			if (strlen($arg2) > 0) $cmdStr .= " \"$arg2\"";
-			if (strlen($arg3) > 0) $cmdStr .= " \"$arg3\"";
-
-			fputs( $this->_connection,"$cmdStr\n" );
-
-			while( !feof( $this->_connection )) {
-
-				$response = fgets( $this->_connection,1024 );
-
-				// An OK signals the end of transmission -- we'll ignore it
-				if ( strncmp( "OK", $response,strlen( "OK" )) == 0 ) {
-					break;
-				}
-
-				// An ERR signals the end of transmission with an error! Let's grab the single-line message.
-				if ( strncmp( "ACK", $response, strlen( "ACK" )) == 0 ) {
-					list ( $junk, $errTmp ) = explode("ACK" . " ",$response );
-					$this->errStr = strtok( $errTmp,"\n" );
-				}
-
-				if ( strlen( $this->errStr ) > 0 ) {
-					return NULL;
-				}
-
-				// Build the response string
-				$respStr .= $response;
-			}
-		}
-		return $respStr;
-	}
-
-        /**
+ 
+	/**
          * Excecuting the 'idle' function requires turning off timeouts, since it could take a long time
          * @param array $subsystems An array of particular subsystems to watch
          * @return string|array
@@ -877,34 +718,22 @@ class LxMPD { //extends \Thread {
         public function idle( $subsystems = array() ) {
                 
 		return $this->runCommand( 'idle', $subsystems, 1800 );
-
-		//$idle = $this->runCommand( 'idle', $subsystems, 1800 );
-                // When two subsystems are changed, only one is printed before the OK
-                // line. Anyone repeatedly polling a PHP script to simulate continuous
-                // listening will miss events as MPD creates a new 'client' on every
-                // request. This will frequently happen as it isn't uncommon for 'player'
-                // 'mixer', and 'playlist' events to fire at the same time (e.g. when someone
-                // double-clicks on a file to add it to the playlist and play in one go
-                // while playback is stopped)
-
-                // This is annoying. The best workaround I can think of is to use the
-                // 'subsystems' argument to split the idle polling into ones that
-                // are unlikely to collide.
-
-                // If the stream is local (so we can assume an extremely fast connection to it)
-                // then try to avoid missing changes by running new 'idle' requests with a
-                // short timeout. This will allow us to clear the queue of any additional
-                // changed systems without slowing down the script too much.
-                // This works reasonably well, but YMMV.
-                /*$idleArray = array( $idle );
-                if( stream_is_local( $this->_connection ) || $this->_host == 'localhost' ) {
-                        try { while( 1 ) { array_push( $idleArray, $this->runCommand( 'idle', $subsystems, 0.1 ) ); } }
-                        catch( MPDException $e ) { ; }
-                }
-                return (count( $idleArray ) == 1)? $idleArray[0] : $idleArray;*/
         }
 
-        /**
+	/**
+	 * GetFirstTrack gets the first track of an album
+	 * @param scope_key is to give scope to the find command
+	 * @param scope_value is the value of the scope
+	 * @return firstTrack 
+	 */
+	public function GetFirstTrack( $scope_key = "album", $scope_value = null) {
+
+		$album = $this->find( "album", $scope_value );
+
+		return $album[0]['file'];
+	}
+      
+	/**
          * Checks whether the socket has connected
          * @return bool
          */
