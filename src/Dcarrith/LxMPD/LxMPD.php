@@ -73,7 +73,7 @@ class LxMPD { //extends \Thread {
 	private $_tagFiltering = true;
 
 	// Variable to specify whether or not to throw missing tag exceptions for tracks that are missing essetial tags
-	private $_throwMissingTagExceptions = true;
+	private $_throwMissingTagExceptions = false;
 
 	// The essential id3 tags that we need when chunking an array of output into chunks of 8 elements
 	private $_essentialID3Tags = array( "Artist", "Album", "Title", "Track", "Time" );
@@ -81,14 +81,11 @@ class LxMPD { //extends \Thread {
 	// The essential MPD tags that we need in combination with essentialID3Tags when chunking an array of output into chunks of 8 elements
 	private $_essentialMPDTags = array( "file", "Pos", "Id" );
 
-	// This will serve as a binary checklist for determining when we've parsed out all the elements of tracks in a playlist
-	private $_trackElementsChecklist = array(); 
+	// This is an array of commands that return either single tracks or a list of tracks that would contain tags that we could filter
+	private $_outputContainsTracks = array( 'playlistinfo' );
 
         // This is an array of commands whose output is expected to be an array
-        private $_expectArrayOutput = array( 'commands', 'decoders', 'find', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'notcommands', 'lsinfo', 'outputs', 'playlist', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistsearch', 'plchanges', 'plchangesposid', 'search', 'tagtypes', 'urlhandlers' );
-      
-	// The output from these commands require special parsing  
-	private $_specialCases = array( 'listplaylists', 'lsinfo', 'decoders' );
+        private $_expectArrayOutput = array( 'commands', 'decoders', 'find', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'notcommands', 'lsinfo', 'outputs', 'playlist', 'playlistfind', 'playlistinfo', 'playlistsearch', 'plchanges', 'plchangesposid', 'search', 'tagtypes', 'urlhandlers' );
  
 	// This is an array of MPD commands that are available through the __call() magic method
 	private $_methods = array( 'add', 'addid', 'clear', 'clearerror', 'close', 'commands', 'consume', 'count', 'crossfade', 'currentsong', 'decoders', 'delete', 'deleteid', 'disableoutput', 'enableoutput', 'find', 'findadd', 'idle', 'kill', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'load', 'lsinfo', 'mixrampdb', 'mixrampdelay', 'move', 'moveid', 'next', 'notcommands', 'outputs', 'password', 'pause', 'ping', 'play', 'playid', 'playlist', 'playlistadd', 'playlistclear', 'playlistdelete', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistmove', 'playlistsearch', 'plchanges', 'plchangesposid', 'previous', 'random', 'rename', 'repeat', 'replay_gain_mode', 'replay_gain_status', 'rescan', 'rm', 'save', 'search', 'seek', 'seekid', 'setvol', 'shuffle', 'single', 'stats', 'status', 'sticker', 'stop', 'swap', 'swapid', 'tagtypes', 'update', 'urlhandlers' );
@@ -120,9 +117,6 @@ class LxMPD { //extends \Thread {
 			// Set the timeout to whatever is set as the php default
 			$this->_timeout = ini_get( 'default_socket_timeout' );
 		}
-
-		// We will need this in order to determine when we've parsed each track from a playlist
-		$this->_trackElementsChecklist = array_fill_keys( array_merge( $this->_essentialMPDTags, $this->_essentialID3Tags ), 0 );	
         }
 
         /**
@@ -246,7 +240,7 @@ class LxMPD { //extends \Thread {
                 }
 
                 // Set up output array and get stream information
-                $output = array();
+                $response = array();
                 $info = stream_get_meta_data( $this->_connection );
 
                 // Wait for output to finish or time out
@@ -279,11 +273,11 @@ class LxMPD { //extends \Thread {
                         
 			} else {
                         
-			        $output[] = $line;
+			        $response[] = $line;
                         }
                 }
 
-		//var_dump($output);
+		//var_dump($response);
 
                 if( $info['timed_out'] ) {
 
@@ -296,7 +290,7 @@ class LxMPD { //extends \Thread {
 
                 } else {
 
-                        return $output;
+                        return $response;
                 }
         }
 
@@ -327,251 +321,39 @@ class LxMPD { //extends \Thread {
 		// Set the timeout in seconds
 		stream_set_timeout( $this->_connection, $timeout );
 
-                // Read the output from the MPD socket
-                $output = $this->read();
+                // Read the response from the MPD socket
+                $response = $this->read();
 
 		// Reset the timeout
 		stream_set_timeout( $this->_connection, $this->_timeout );
 
-                // Return parsed output
-                return $this->parseOutput( $output, $command, $args );
+                // Return the parsed response array
+                return $this->parse( $response, $command, $args );
         }
 
         /**
          * Parses an array of output lines from MPD into a common array format
-         * @param array $output the output read from the connection to MPD
+         * @param array $response the output read from the connection to MPD
          * @return mixed (string || array)
          */
-        private function parseOutput( $output, $command = '', $args = array() ) {
+        private function parse( $response, $command = '', $args = array() ) {
 
-                $parsedOutput = array();
+		// This is the array for storing all the parsed output
+                $parsed = array();
 
-		//var_dump( $command );
-		//var_dump( $args );
-		//var_dump( $output );		
-
-		/*if( strlen($command) > 1000 ) {
-
-			var_dump($command);
-			var_dump($args);
-			var_dump($output);
-		}*/
-
-		if( !count($output) ) {
-			return $parsedOutput;
+		// If the response from MPD was an empty array, then just return
+		if( !count( $response ) ) {
+			return $parsed;
 		}
-
-		$test = array();
 	
 		switch( $command ) {
 
-			// The current playlist needs to be parsed out and chunked into an array of tracks for easier handling
-			case 'playlistinfo' :
-
-				// This is for keeping track of the track being parsed out
-				$count = 0;
-
-				// This is in case we need to report on tracks that are missing essential tags
-				$incompleteTracks = array();
-
-				// This is also in case we need to report on tracks that are missing essential tags
-				$essentialTags = array_merge( $this->_essentialMPDTags, $this->_essentialID3Tags );
-
-				if( !$this->_tagFiltering ) {
-
-					$track = array();
-
-					foreach( $output as $line ) {
-
-						// Get the key value pairs from the line of output
-						preg_match('/(.*?):\s(.*)/', $line, $matches);
-
-						// Put the cleaned up matched pieces into the variables we'll be using
-						list( $subject, $key, $value ) = $matches;
-	
-						if( array_key_exists( $key, $track ) ) {
-
-							// Append the track array onto the array of parsedOutput to be returned
-							$test[] = $track;
-						
-							// Initialize a new track to compile
-							$track = array( $key => $value );
-					
-						} else {
-
-							// Set the key value pair in the track array
-							$track[ $key ] = $value;
-						}
-					}
-				
-					// Append the last track that was compiled onto the array of parsedOutput to return
-					$test[] = $track;
-
-					if( $this->_throwMissingTagExceptions ) {
-
-						// Re-initialize the trackElementsChecklist 
-						$this->_trackElementsChecklist = array_fill_keys( $essentialTags, 0 );
-
-						// Now, let's check for any missing essential tags in each track so we can report on them in an exception
-						foreach( $test as $track ) {
-		
-							foreach( $track as $key => $value ) {
-	
-								// We only need certain key value pairs to fill out a track 
-								if ( in_array( $key, $essentialTags )) {
-
-									// Let's first make sure that the current track being compiled doesn't already have this key value
-									if( !$this->_trackElementsChecklist[ $key ] ) {
-
-										// Check off this key so we know we've gotten it for the current track
-										$this->_trackElementsChecklist[ $key ] = 1;
-
-									} else {
-				
-										if( !(count( array_keys( $this->_trackElementsChecklist, '1' )) == count( $this->_trackElementsChecklist ))) {
-											// Loop through the missing elements so we can keep a record of it
-											foreach( array_keys( $this->_trackElementsChecklist, '0' ) as $missing ) {
-	
-												// Store which tracks are missing what tags
-												$incompleteTracks[ $count ][] = $missing;
-											}
-										}
-
-										// Moving on to the next track to compile
-										$count++;
-	
-										// Re-initialize the trackElementsChecklist 
-										$this->_trackElementsChecklist = array_fill_keys( $essentialTags, 0 );
-	
-										// Check off this key so we know we've gotten it for the next track to compile
-										$this->_trackElementsChecklist[ $key ] = 1;
-									}
-								}
-							}
-						}
-
-						//var_dump($test);
-						//var_dump($this->_trackElementsChecklist);
-						//var_dump($incompleteTracks);
-	
-						// If we have any tracks that are missing essential tags, then throw an exception to alert the user
-						if( count($incompleteTracks) ) {
-					
-							$detailedMessage = "";
-
-							foreach( $incompleteTracks as $num => $missing ) {
-								
-								$detailedMessage .= "Track #".$num." is missing tags: ".implode( ", ", $missing ).".  ";
-							}
-
-							// There must be some essential tags missing from one or more tracks in the playlist
-							throw new MPDException( 'The command "'.$command.'" has retrieved some tracks that are missing essential tag elements.  Please clean up any deficient id3 tags and try again.  The essentials tags are as follows: '.implode(", ", $this->_essentialID3Tags).'.  Details: '.$detailedMessage, self::ESSENTIAL_ID3_TAGS_MISSING );
-						}
-
-					}				
-
-				} else {
-
-					// Re-initialize the trackElementsChecklist 
-					$this->_trackElementsChecklist = array_fill_keys( $essentialTags, 0 );
-
-					foreach( $output as $line ) {
-
-						// Get the key value pairs from the line of output
-						preg_match('/(.*?):\s(.*)/', $line, $matches);
-
-						// Put the cleaned up matched pieces into the variables we'll be using
-						list( $subject, $key, $value ) = $matches;
-
-						// We only need certain key value pairs to fill out a track 
-						if ( in_array( $key, $essentialTags )) {
-
-							// Let's first make sure that the current track being compiled doesn't already have this key value
-							if( !$this->_trackElementsChecklist[ $key ] ) {
-
-								// Set the key value pair for the current track being compiled
-								$test[ $count ][ $key ] = $value;
-
-								// Check off this key so we know we've gotten it for the current track
-								$this->_trackElementsChecklist[ $key ] = 1;
-
-							} else {
-					
-								if( !(count( array_keys( $this->_trackElementsChecklist, '1' )) == count( $this->_trackElementsChecklist ))) {
-									// Loop through the missing elements so we can keep a record of it
-									foreach( array_keys( $this->_trackElementsChecklist, '0' ) as $missing ) {
-
-										// Store which tracks are missing what tags
-										$incompleteTracks[ $count ][] = $missing;
-									}
-								}
-
-								// Moving on to the next track to compile
-								$count++;
-
-								// Re-initialize the trackElementsChecklist 
-								$this->_trackElementsChecklist = array_fill_keys( $essentialTags, 0 );
-
-								// Set the first key value pair for the next track to compile
-								$test[ $count ][ $key ] = $value;
-		
-								// Check off this key so we know we've gotten it for the next track to compile
-								$this->_trackElementsChecklist[ $key ] = 1;
-							}
-						}
-					}
-
-					//var_dump($this->_trackElementsChecklist);
-					//var_dump($incompleteTracks);
-	
-					if( $this->_throwMissingTagExceptions ) {
-
-						// If we have any tracks that are missing essential tags, then throw an exception to alert the user
-						if( count($incompleteTracks) ) {
-
-							$detailedMessage = "";
-
-							foreach( $incompleteTracks as $num => $missing ) {
-								
-								$detailedMessage .= "Track #".$num." is missing tags: ".implode( ", ", $missing ).".  ";
-							}
-
-							// There must be some essential tags missing from one or more tracks in the playlist
-							throw new MPDException( 'The command "'.$command.'" has retrieved some tracks that are missing essential tag elements.  Please clean up any deficient id3 tags and try again.  The essentials tags are as follows: '.implode(", ", $this->_essentialID3Tags).'.  Details: '.$detailedMessage, self::ESSENTIAL_ID3_TAGS_MISSING );
-						}
-					}
-				}
-
-				return $test;
-
-				break;
-
-			// This will parse out the playlists into an simple array of playlist names
-			case 'listplaylists' :
-
-				foreach( $output as $line ) {
-
-					// Get the key value pairs from the line of output
-					preg_match('/(.*?):\s(.*)/', $line, $matches);
-
-					// Put the cleaned up matched pieces into the variables we'll be using
-					list( $subject, $key, $value ) = $matches;
-
-					if ($key == "playlist") {
-
-						$test[]['name'] = $value;
-					}			
-				}
-
-				return $test;
-
-				break;
-
-			// This will parse out a specific playlist into a simple array of playlist tracks
+			// This will parse out a list of something like artists or albums into a simple array of values
 			case 'list' :
 			case 'listplaylist' :
+			case 'listplaylists' :
 
-				foreach( $output as $line ) {
+				foreach( $response as $line ) {
 
 					// Get the key value pairs from the line of output
 					preg_match('/(.*?):\s(.*)/', $line, $matches);
@@ -583,24 +365,38 @@ class LxMPD { //extends \Thread {
 
 					// Put the cleaned up matched pieces into the variables we'll be using
 					list( $subject, $key, $value ) = $matches;
-	
-					// For playlists that aren't the current playlist, we only need an array of values
-					$test[] = $value;
+
+					// listplaylists requires special treatment
+					if( $command == "listplaylists") {
+
+						// We only care about the elements with the key 'playlist'
+						if( $key == "playlist" ) {
+
+							// We only need an array of playlist names
+							$parsed[] = $value;
+						}
+
+					} else {
+
+						// For playlists that aren't the current playlist, we only need an array of values
+						$parsed[] = $value;
+					}
 				}
 
-				return $test;
+				return $parsed;
 
 				break;
 
+			// listplaylistinfo
+			// playlistinfo
 			// statistics
 			// stats
-			// list	
 			// idle	
 			default :
 
 				$items = array();
 
-				foreach( $output as $line ) {
+				foreach( $response as $line ) {
 
 					// Get the key value pairs from the line of output
 					preg_match('/(.*?):\s(.*)/', $line, $matches);
@@ -608,10 +404,14 @@ class LxMPD { //extends \Thread {
 					// Put the cleaned up matched pieces into the variables we'll be using
 					list( $subject, $key, $value ) = $matches;
 	
+					// The response output from certain commands like statistics and stats will never 
+					// meet this condition, so therefore the items array will always be built as an
+					// associative array with key => value pairs.  The response output from commands
+					// like list, or list 
 					if( array_key_exists( $key, $items ) ) {
 
 						// Append the track array onto the array of parsedOutput to be returned
-						$test[] = $items;
+						$parsed[] = $items;
 						
 						// Initialize a new track to compile
 						$items = array( $key => $value );
@@ -626,26 +426,28 @@ class LxMPD { //extends \Thread {
 				if( in_array( $command, $this->_expectArrayOutput ) ) {
 
 					// Append the last items array onto the array of parsedOutput to return
-					$test[] = $items;
-
-					//var_dump("here is the collection of items");
-					//var_dump($test);
-
-					return $test;
-
-				} else {
+					$parsed[] = $items;
 				
-					//var_dump("here are the items");
-					//var_dump($items);
+				} else {
 
-					return $items;
-				}	
-			
+					$parsed = $items;
+				} 
+				
+				// If the output contains one or more tracks, then we can filter and report on missing tags if needed
+				if( in_array( $command, $this->_outputContainsTracks )) {
 
-				// This is an array of commands whose output is expected to be an array
-				//private $_expectArrayOutput = array( 'commands', 'decoders', 'find', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'notcommands', 'lsinfo', 'outputs', 'playlist', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistsearch', 'plchanges', 'plchangesposid', 'search', 'tagtypes', 'urlhandlers' );
+					if( $this->_tagFiltering ) {
 
-				//return ( in_array( $command, $this->_expectArrayOutput ) ? array( $test ) : $test );
+						$parsed = $this->filterOutUnwantedTags( $parsed );
+					}
+
+					if( $this->_throwMissingTagExceptions ) {
+
+						$this->reportOnMissingTags( $command, $parsed );
+					}
+				}
+
+				return $parsed;
 
 				break;
 		}
@@ -777,6 +579,68 @@ class LxMPD { //extends \Thread {
 		$this->_local = false;
 
 		return false;
+	}
+
+	public function getEssentialTags() {
+
+		// Merge together the two types of tags as one array of essentialTags
+		return array_merge( $this->_essentialMPDTags, $this->_essentialID3Tags );
+	}
+
+	public function reportOnMissingTags( $command, $tracks ) {
+
+		// This is also in case we need to report on tracks that are missing essential tags
+		$essentialTags = $this->getEssentialTags();
+
+		$incompleteTracks = array_filter( array_map( function( $track ) use ( $essentialTags ) {
+
+			$missingTags = array_flip( array_diff_key( array_flip( $essentialTags ), $track ));
+
+			return (count($missingTags) ? (array($track['Id'] => $missingTags)) : array());
+
+		}, $tracks), function( $missing ) {
+
+			return (count($missing));
+		});
+
+		// If we have any tracks that are missing essential tags, then throw an exception to alert the user
+		if( count($incompleteTracks) ) {
+					
+			$detailedMessage = "";
+	
+			foreach( $incompleteTracks as $incompleteTrack ) {
+	
+				// Get the id from the incompleteTrack array	
+				$id = key($incompleteTrack);
+
+				// Retrieve more information about the track that's missing tags
+				$track = $this->playlistid( $id );
+
+				// Get the name of the artist
+				$artist = $track['Artist'];
+
+				// Get the name of the album
+				$album = $track['Album'];
+
+				// Complile a detailed message about the track
+				$detailedMessage .= "Track #".$id." from the artist '".$artist.",' specifically, the album '".$album."', is missing tag".((count($incompleteTrack) > 1) ? "s: " : ": ").implode( ", ", current($incompleteTrack) ).".  ";
+			}
+
+			// There must be some essential tags missing from one or more tracks in the playlist
+			throw new MPDException( 'The command "'.$command.'" has retrieved some tracks that are missing essential tag elements.  Please clean up any deficient id3 tags and try again.  The essentials tags are as follows: '.implode(", ", $this->_essentialID3Tags).'.  Details: '.$detailedMessage, self::ESSENTIAL_ID3_TAGS_MISSING );
+		}
+	}
+
+	public function filterOutUnwantedTags( $tracks ) {
+
+		// This is also in case we need to report on tracks that are missing essential tags
+		$essentialTags = $this->getEssentialTags();
+
+		return array_map( function( $track ) use ( $essentialTags ) {
+
+			return array_intersect_key( $track, array_flip( $essentialTags ) );
+
+		}, $tracks); 
 	}
 
 	/**
