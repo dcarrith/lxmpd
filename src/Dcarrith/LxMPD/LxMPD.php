@@ -38,7 +38,10 @@ class LxMPD { //extends \Thread {
 	const ACK_ERROR_PLAYER_SYNC = 55;
 	const ACK_ERROR_EXIST = 56;
 
-	const ESSENTIAL_ID3_TAGS_MISSING = 70;
+	// Missing tag errors
+	const ESSENTIAL_TAGS_MISSING = 70;
+	const ESSENTIAL_ID3_TAGS_MISSING = 71;
+	const ESSENTIAL_MPD_TAGS_MISSING = 72;
 
 	// A general command failed 
 	const MPD_COMMAND_FAILED = -100;
@@ -89,6 +92,9 @@ class LxMPD { //extends \Thread {
  
 	// This is an array of MPD commands that are available through the __call() magic method
 	private $_methods = array( 'add', 'addid', 'clear', 'clearerror', 'close', 'commands', 'consume', 'count', 'crossfade', 'currentsong', 'decoders', 'delete', 'deleteid', 'disableoutput', 'enableoutput', 'find', 'findadd', 'idle', 'kill', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'load', 'lsinfo', 'mixrampdb', 'mixrampdelay', 'move', 'moveid', 'next', 'notcommands', 'outputs', 'password', 'pause', 'ping', 'play', 'playid', 'playlist', 'playlistadd', 'playlistclear', 'playlistdelete', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistmove', 'playlistsearch', 'plchanges', 'plchangesposid', 'previous', 'random', 'rename', 'repeat', 'replay_gain_mode', 'replay_gain_status', 'rescan', 'rm', 'save', 'search', 'seek', 'seekid', 'setvol', 'shuffle', 'single', 'stats', 'status', 'sticker', 'stop', 'swap', 'swapid', 'tagtypes', 'update', 'urlhandlers' );
+
+	// This is an array of MPD commands that should return a bool
+	private $_responseShouldBeBoolean = array( 'delete' );
 
         /**
          * Set connection paramaters.
@@ -239,8 +245,13 @@ class LxMPD { //extends \Thread {
                         $this->connect();
                 }
 
-                // Set up output array and get stream information
+                // Set up the array to use for storing the read in MPD response
                 $response = array();
+
+		// This will be used in case there is an empty array as the response
+		$ok = false;
+
+		// Get the stream meta-data
                 $info = stream_get_meta_data( $this->_connection );
 
                 // Wait for output to finish or time out
@@ -259,6 +270,7 @@ class LxMPD { //extends \Thread {
 
                         } else if( strcmp( self::MPD_OK, $line ) == 0 ) {
 
+				$ok = true;
                                 break;
 
                         } else if( strncmp( self::MPD_ERROR, $line, strlen( self::MPD_ERROR ) ) == 0 && preg_match( '/^ACK \[(.*?)\@(.*?)\] \{(.*?)\} (.*?)$/', $line, $matches ) ) {
@@ -289,6 +301,11 @@ class LxMPD { //extends \Thread {
                         throw new MPDException( 'Command timed out', self::MPD_TIMEOUT );
 
                 } else {
+
+			if( !count($response) ) {
+			
+				$response = $ok;
+			}
 
                         return $response;
                 }
@@ -341,7 +358,21 @@ class LxMPD { //extends \Thread {
 		// This is the array for storing all the parsed output
                 $parsed = array();
 
-		// If the response from MPD was an empty array, then just return
+		// If the response is a boolean, and the command is one that expects a boolean response, then return the response
+		if( is_bool($response) ) {
+
+			if( in_array( $command, $this->_responseShouldBeBoolean )) {
+
+				return $response;
+			
+			} else {
+
+				// If the command isn't expecting a boolean result, then we need to set the response back to an empty array
+				$response = array();
+			}
+		}
+
+		// If the response from MPD was an empty array, then just return the empty parsed array
 		if( !count( $response ) ) {
 			return $parsed;
 		}
@@ -455,13 +486,11 @@ class LxMPD { //extends \Thread {
 		return false;
         }
 
-	/* RefreshInfo() 
-	 * 
-	 * Updates all class properties with the values from the MPD server.
+	/* refreshInfo updates all class properties with the values from the MPD server.
      	 *
-	 * NOTE: This function is automatically called upon Connect() as of v1.1.
+	 * NOTE: This function is automatically called upon Connect()
 	 */
-	public function RefreshInfo() {
+	public function refreshInfo() {
         	
 		// Get the Server Statistics
 		$this->statistics = $this->stats();
@@ -535,7 +564,7 @@ class LxMPD { //extends \Thread {
 	 * @param scope_value is the value of the scope
 	 * @return firstTrack 
 	 */
-	public function GetFirstTrack( $scope_key = "album", $scope_value = null) {
+	public function getFirstTrack( $scope_key = "album", $scope_value = null ) {
 
 		$album = $this->find( "album", $scope_value );
 
@@ -566,40 +595,56 @@ class LxMPD { //extends \Thread {
 	 */
 	public function determineIfLocal() {
 
+		// Compare the MPD host a few different ways to try and determine if it's local to the Apache server
 		if( 	( stream_is_local( $this->_connection ))    || 
 			( $this->_host == (isset($_SERVER["SERVER_ADDR"]) ? $_SERVER["SERVER_ADDR"] : getHostByName( getHostName() ))) ||
 			( $this->_host == 'localhost' ) 	     || 
 			( $this->_host == '127.0.0.1' )) {
 
 			$this->_local = true;
-
-			return true;
 		}
 
 		$this->_local = false;
-
-		return false;
 	}
 
+	/**
+	 * getEssentialTags combines the essential ID3 as well as MPD-specific tags 
+	 * @return array  
+	 */
 	public function getEssentialTags() {
 
 		// Merge together the two types of tags as one array of essentialTags
 		return array_merge( $this->_essentialMPDTags, $this->_essentialID3Tags );
 	}
 
+	/**
+	 * reportOnMissingTags will find any tracks that are missing essentials tags and throws an exception 
+	 * 	that contains enough information to track down the missing tags so the user can fill them in
+	 *	with the id3 editor of their choice
+	 * @param string $command is the command that was run which we want to pass through to the exception message
+	 * @param array $tracks is the array of tracks to loop through
+	 * @throws MPDException
+	 * @return void
+	 */
 	public function reportOnMissingTags( $command, $tracks ) {
 
-		// This is also in case we need to report on tracks that are missing essential tags
+		// getEssentialTags combines the essential ID3 as well as MPD-specific tags 
 		$essentialTags = $this->getEssentialTags();
-
+	
+		// Loop through the tracks array so we can replace each track with a simple array of missing tags
 		$incompleteTracks = array_filter( array_map( function( $track ) use ( $essentialTags ) {
 
+			// Flip the essential tags array so the values are keys.
+			// Take the diff_key of that and $track so we're left with only tags that are in the essentialTags array, but not in $track.
+			// Flip the result of that back around so the keys are values again.
 			$missingTags = array_flip( array_diff_key( array_flip( $essentialTags ), $track ));
 
+			// If there are missing tags, then return the array element using the MPD track Id as the key so we can retrieve more info later.
 			return (count($missingTags) ? (array($track['Id'] => $missingTags)) : array());
 
 		}, $tracks), function( $missing ) {
 
+			// Filter out any empty arrays so we're only left with the arrays of the incomplete tracks
 			return (count($missing));
 		});
 
@@ -607,7 +652,8 @@ class LxMPD { //extends \Thread {
 		if( count($incompleteTracks) ) {
 					
 			$detailedMessage = "";
-	
+
+			// Loop through the incomplete tracks so we can retrieve more info about each track and build the exception message	
 			foreach( $incompleteTracks as $incompleteTrack ) {
 	
 				// Get the id from the incompleteTrack array	
@@ -627,20 +673,23 @@ class LxMPD { //extends \Thread {
 			}
 
 			// There must be some essential tags missing from one or more tracks in the playlist
-			throw new MPDException( 'The command "'.$command.'" has retrieved some tracks that are missing essential tag elements.  Please clean up any deficient id3 tags and try again.  The essentials tags are as follows: '.implode(", ", $this->_essentialID3Tags).'.  Details: '.$detailedMessage, self::ESSENTIAL_ID3_TAGS_MISSING );
+			throw new MPDException( 'The command "'.$command.'" has retrieved some tracks that are missing essential tag elements.  Please clean up any deficient id3 tags and try again.  The essentials tags are as follows: '.implode(", ", $essentialID3Tags).'.  Details: '.$detailedMessage, self::ESSENTIAL_TAGS_MISSING );
 		}
 	}
 
 	public function filterOutUnwantedTags( $tracks ) {
 
-		// This is also in case we need to report on tracks that are missing essential tags
+		// getEssentialTags combines the essential ID3 as well as MPD-specific tags 
 		$essentialTags = $this->getEssentialTags();
 
+		// Loop through the tracks array so we can modify each track and filter out all but the essential tags
 		return array_map( function( $track ) use ( $essentialTags ) {
 
+			// Flip the essential tags array so the values are keys
+			// Then intersect that with the track array so we're left with the essential tags
 			return array_intersect_key( $track, array_flip( $essentialTags ) );
 
-		}, $tracks); 
+		}, $tracks);
 	}
 
 	/**
