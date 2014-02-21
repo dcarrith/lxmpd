@@ -1,14 +1,14 @@
 <?php namespace Dcarrith\LxMPD\Connection;
 /**
-* LxMPD.php: A Laravel-ready class for controlling MPD
+* MPDConnection.php: A class for opening a socket connection to MPD
 */
 
 use Config;
 use Dcarrith\LxMPD\MPDException as MPDException; 
 
 /**
-* This class is responsible for establishing a connection to MPD, among other things
-* @package MPD
+* This class is responsible for establishing a socket connection to MPD
+* @package LxMPD
 */
 class MPDConnection {
 
