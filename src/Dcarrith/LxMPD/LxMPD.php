@@ -479,9 +479,7 @@ class LxMPD {
 	 */
 	public function getFirstTrack( $scope_key = "album", $scope_value = null ) {
 
-		$album = $this->find( "album", $scope_value );
-
-		return $album[0]['file'];
+		return current( $this->find( "album", $scope_value ))['file'];
 	}
 
 	/**
