@@ -11,7 +11,7 @@ use Dcarrith\LxMPD\Connection\MPDConnection as MPDConnection;
 * A Laravel-ready class for controlling MPD
 * @package MPD
 */
-class LxMPD { //extends \Thread {
+class LxMPD {
 
         // MPD Responses
         const MPD_OK = 'OK';
@@ -57,14 +57,14 @@ class LxMPD { //extends \Thread {
 	// Variable to switch on and off debugging
 	private $_debugging = false;
 
-	// Variable for storing properties available via PHP magic methods: __set(), __get(), __isset(), __unset()
-	private $_properties = array();
-
 	// Variable to specify whether or not playlist tracks should be filtered down to only contain essential tags
 	private $_tagFiltering = true;
 
 	// Variable to specify whether or not to throw missing tag exceptions for tracks that are missing essetial tags
 	private $_throwMissingTagExceptions = false;
+
+	// Variable for storing properties available via PHP magic methods: __set(), __get(), __isset(), __unset()
+	private $_properties = array();
 
 	// The essential id3 tags that we need when chunking an array of output into chunks of 8 elements
 	private $_essentialID3Tags = array( "Artist", "Album", "Title", "Track", "Time" );
@@ -92,7 +92,7 @@ class LxMPD { //extends \Thread {
         function __construct( MPDConnection $connection ) {
 
 		// Set the connection to the injected connection object
-		$this->_connection = $connection;
+		$this->connection = $connection;
         }
 
         /**
@@ -102,20 +102,20 @@ class LxMPD { //extends \Thread {
         public function authenticate() {
 
                 // Check whether the socket is already connected
-                if( !$this->_connection->isEstablished() ) {
+                if( !$this->connection->established ) {
 
 			// Throw an MPDException along with the connection errors
 			throw new MPDException( 'The connection to MPD has not been established', self::MPD_CONNECTION_NOT_ESTABLISHED );
                 }
                                 
 		// Send the connection password
-                if( $this->_connection->hasPassword() ) {
+                if( $this->connection->hasPassword() ) {
 
 			// Authenticate to MPD 
-			if( !$this->password( $this->_connection->getPassword() )) {
+			if( !$this->password( $this->connection->password )) {
 
 				// We might as well not be connected
-				$this->_connection->close();
+				$this->connection->close();
 
 				// If the password fails, then we're not going to be able to do much
 				throw new MPDException( 'MPD did not like the provided password', self::MPD_BAD_PASSWORD );
@@ -124,7 +124,7 @@ class LxMPD { //extends \Thread {
 		} else {
 					
 			// We might as well not be connected
-			$this->_connection->close();
+			$this->connection->close();
 
 			// If we don't have a password, then we're not going to be able to do much
 			throw new MPDException( 'Must supply a password to authenticate to MPD', self::MPD_NO_PASSWORD );
@@ -141,11 +141,11 @@ class LxMPD { //extends \Thread {
          */
         private function write( $data ) {
  
-		if( !$this->_connection->isEstablished() ) {
-                        $this->_connection->establish();
+		if( !$this->connection->established ) {
+                        $this->connection->establish();
                 }
 
-		if( !fputs( $this->_connection->getSocket(), "$data\n" ) ) {
+		if( !fputs( $this->connection->socket, "$data\n" ) ) {
 			throw new MPDException( 'Failed to write to MPD socket', self::MPD_WRITE_FAILED );
                 }
 
@@ -159,8 +159,8 @@ class LxMPD { //extends \Thread {
         private function read() {
 
                 // Check for a connection
-                if( !$this->_connection->isEstablished() ) {
-                        $this->_connection->establish();
+                if( !$this->connection->established ) {
+                        $this->connection->establish();
                 }
 
                 // Set up the array to use for storing the read in MPD response
@@ -170,16 +170,14 @@ class LxMPD { //extends \Thread {
 		$ok = false;
 
 		// Get the stream meta-data
-                $info = stream_get_meta_data( $this->_connection->getSocket() );
+                $info = stream_get_meta_data( $this->connection->socket );
 
                 // Wait for output to finish or time out
-                while( !feof( $this->_connection->getSocket() ) && !$info['timed_out'] ) {
+                while( !feof( $this->connection->socket ) && !$info['timed_out'] ) {
 
-                        $line = trim( fgets( $this->_connection->getSocket() ));
+                        $line = trim( fgets( $this->connection->socket ));
 
-			$info = stream_get_meta_data( $this->_connection->getSocket() );
-
-                        $matches = array();
+			$info = stream_get_meta_data( $this->connection->socket );
 
                         // We get empty lines sometimes. Ignore them.
                         if( empty( $line ) ) {
@@ -209,7 +207,7 @@ class LxMPD { //extends \Thread {
 
                 if( $info['timed_out'] ) {
 
-			$this->_connection->close();
+			$this->connection->close();
 
                         throw new MPDException( 'Command timed out', self::MPD_TIMEOUT );
 
@@ -234,7 +232,7 @@ class LxMPD { //extends \Thread {
         public function runCommand( $command, $args = array(), $timeout = null ) {
 
 		// Set a timeout so it's always set to either the default or the passed in parameter
-		$timeout = ( isset( $timeout ) ? intval( $timeout ) : $this->_connection->getTimeout() );
+		$timeout = ( isset( $timeout ) ? intval( $timeout ) : $this->connection->timeout );
 
                 // Trim and then cast the command to a string, just to make sure
                 $toWrite = strval( trim( $command ));
@@ -249,13 +247,13 @@ class LxMPD { //extends \Thread {
                 $this->write( $toWrite );
 
 		// Set the timeout in seconds
-		$this->_connection->setStreamTimeout( $timeout );		
+		$this->connection->setStreamTimeout( $timeout );		
 
                 // Read the response from the MPD socket
                 $response = $this->read();
 
 		// Set the timeout in seconds
-		$this->_connection->setStreamTimeout( $timeout );		
+		$this->connection->setStreamTimeout( $timeout );		
 
                 // Return the parsed response array
                 return $this->parse( $response, $command, $args );
@@ -582,7 +580,7 @@ class LxMPD { //extends \Thread {
          */
         public function isConnected() {
 
-                return $this->_connection->isEstablished();
+                return $this->connection->established;
         }
 
 	/**
