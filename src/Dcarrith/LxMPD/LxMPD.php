@@ -4,9 +4,12 @@
 */
 
 use Config;
-use Dcarrith\LxMPD\Exception\MPDException as MPDException; 
+use Dcarrith\LxMPD\Exception\MPDException as MPDException;
 use Dcarrith\LxMPD\Connection\MPDConnection as MPDConnection;
- 
+use Log;
+use Request;
+use \Carbon\Carbon;
+
 /**
 * A Laravel-ready class for controlling MPD
 * @package MPD
@@ -23,7 +26,7 @@ class LxMPD {
         const MPD_UNEXPECTED_OUTPUT = -5;
         const MPD_TIMEOUT = -6;
 	const MPD_CONNECTION_NOT_ESTABLISHED = -7;
- 
+
 	// MPD ACK_ERROR constants from Ack.hxx
 	const ACK_ERROR_NOT_LIST = 1;
 	const ACK_ERROR_ARG = 2;
@@ -43,7 +46,7 @@ class LxMPD {
 	const ESSENTIAL_ID3_TAGS_MISSING = 71;
 	const ESSENTIAL_MPD_TAGS_MISSING = 72;
 
-	// A general command failed 
+	// A general command failed
 	const MPD_COMMAND_FAILED = -100;
 
 	// Authentication errors
@@ -77,26 +80,51 @@ class LxMPD {
 
         // This is an array of commands whose output is expected to be an array
         private $_expectArrayOutput = array( 'commands', 'decoders', 'find', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'notcommands', 'lsinfo', 'outputs', 'playlist', 'playlistfind', 'playlistinfo', 'playlistsearch', 'plchanges', 'plchangesposid', 'search', 'tagtypes', 'urlhandlers' );
- 
+
 	// This is an array of MPD commands that are available through the __call() magic method
 	private $_methods = array( 'add', 'addid', 'clear', 'clearerror', 'close', 'commands', 'consume', 'count', 'crossfade', 'currentsong', 'decoders', 'delete', 'deleteid', 'disableoutput', 'enableoutput', 'find', 'findadd', 'idle', 'kill', 'list', 'listall', 'listallinfo', 'listplaylist', 'listplaylistinfo', 'listplaylists', 'load', 'lsinfo', 'mixrampdb', 'mixrampdelay', 'move', 'moveid', 'next', 'notcommands', 'outputs', 'password', 'pause', 'ping', 'play', 'playid', 'playlist', 'playlistadd', 'playlistclear', 'playlistdelete', 'playlistfind', 'playlistid', 'playlistinfo', 'playlistmove', 'playlistsearch', 'plchanges', 'plchangesposid', 'previous', 'random', 'rename', 'repeat', 'replay_gain_mode', 'replay_gain_status', 'rescan', 'rm', 'save', 'search', 'seek', 'seekid', 'setvol', 'shuffle', 'single', 'stats', 'status', 'sticker', 'stop', 'swap', 'swapid', 'tagtypes', 'update', 'urlhandlers' );
 
 	// This is an array of MPD commands that should return a bool
 	private $_responseShouldBeBoolean = array( 'delete', 'password' );
 
+	// This is the current playlist
+	public $playlist = array();
+
         /**
          * Set connection paramaters.
          * @param $connection type MPDConnection class
          * @return void
          */
-        function __construct( MPDConnection $connection ) {
+        function __construct( MPDConnection $connection = null ) {
 
 		// Set the connection to the injected connection object
 		$this->connection = $connection;
         }
 
         /**
-         * Authenticate to the MPD server 
+         * Start up MPD.
+         * @param $binary
+	 *    The path to the MPD binary
+         * @param $conf
+	 *    The path to the user's MPD conf file
+         * @return result
+         */
+	public function start( $binary = null, $conf = null ) {
+
+		Log::info( 'LxMPD->start', array($binary, $conf));
+
+		// Try to spawn a new instance of mpd
+		$result = exec($binary.' '.$conf.' 2>&1', $output, $code);
+
+		Log::info( 'LxMPD->start - result', array($result));
+		Log::info( 'LxMPD->start - output', array($output));
+		Log::info( 'LxMPD->start - code', array($code));
+
+		return $result;
+	}
+
+        /**
+         * Authenticate to the MPD server
          * @return bool
          */
         public function authenticate() {
@@ -107,11 +135,11 @@ class LxMPD {
 			// Throw an MPDException along with the connection errors
 			throw new MPDException( 'The connection to MPD has not been established', self::MPD_CONNECTION_NOT_ESTABLISHED );
                 }
-                                
+
 		// Send the connection password
                 if( $this->connection->hasPassword() ) {
 
-			// Authenticate to MPD 
+			// Authenticate to MPD
 			if( !$this->password( $this->connection->password )) {
 
 				// We might as well not be connected
@@ -122,7 +150,7 @@ class LxMPD {
 			}
 
 		} else {
-					
+
 			// We might as well not be connected
 			$this->connection->close();
 
@@ -140,12 +168,18 @@ class LxMPD {
          * @return bool
          */
         private function write( $data ) {
- 
+
 		if( !$this->connection->established ) {
+
+			Log::info('LxMPD connection is NOT established', array($data));
+
                         $this->connection->establish();
                 }
 
 		if( !fputs( $this->connection->socket, "$data\n" ) ) {
+
+			Log::info('LxMPD write fputs seems to have failed writing to socket', array($data));
+
 			throw new MPDException( 'Failed to write to MPD socket', self::MPD_WRITE_FAILED );
                 }
 
@@ -172,12 +206,20 @@ class LxMPD {
 		// Get the stream meta-data
                 $info = stream_get_meta_data( $this->connection->socket );
 
+		//Log::info('LxMPD->read : stream_get_meta_data for this->connection->socket', array($info));
+
                 // Wait for output to finish or time out
                 while( !feof( $this->connection->socket ) && !$info['timed_out'] ) {
 
+			try {
+
                         $line = trim( fgets( $this->connection->socket ));
 
+			//Log::info('LxMPD->read : line', array($line));
+
 			$info = stream_get_meta_data( $this->connection->socket );
+
+			//Log::info('LxMPD->read : stream_get_meta_data for this->connection->socket', array($info));
 
                         // We get empty lines sometimes. Ignore them.
                         if( empty( $line ) ) {
@@ -197,12 +239,22 @@ class LxMPD {
 				// Fourth item in matches will be the error message
 				list( $constant, $index, $command, $error ) = $matches;
 
-				throw new MPDException( 'Command failed: '.$errorMessage, self::MPD_COMMAND_FAILED );
-                        
+				Log::info('LxMPD write constant', array($constant));
+				//Log::info('LxMPD write index', array($index));
+				//Log::info('LxMPD write command', array($command));
+				//Log::info('LxMPD write error', array($error));
+
+				throw new MPDException( 'Command failed: '.$error, self::MPD_COMMAND_FAILED );
+
 			} else {
-                        
+
 			        $response[] = $line;
                         }
+
+			} catch (Exception $e) {
+
+				Log::info('LxMPD->read : Exception occurred', $e);
+			}
                 }
 
                 if( $info['timed_out'] ) {
@@ -214,7 +266,7 @@ class LxMPD {
                 } else {
 
 			if( !count($response) ) {
-			
+
 				$response = $ok;
 			}
 
@@ -229,7 +281,10 @@ class LxMPD {
          * @param int $timeout The script's timeout, in seconds
          * @return array Array of parsed output
          */
-        public function runCommand( $command, $args = array(), $timeout = null ) {
+        public function runCommand( $command, $args = array(), $timeout = 86400 ) {
+
+		// Convert a string args to an array
+		if(!is_array($args)) $args = array($args);
 
 		// Set a timeout so it's always set to either the default or the passed in parameter
 		$timeout = ( isset( $timeout ) ? intval( $timeout ) : $this->connection->timeout );
@@ -239,21 +294,52 @@ class LxMPD {
 
 		// If the args is an array, then first escape double quotes in every element, then implode to strings delimted by enclosing quotes
 		if( is_array( $args ) && ( count( $args ) > 0 )) {
-	 	
-			$toWrite .= ' "' . implode('" "', str_replace( '"', '\"', $args )) . '"';
+
+			// This was causing an array to string conversion during the status command
+			//$toWrite .= ' "' . implode('" "', str_replace( '"', '\"', $args )) . '"';
+
+			// We need to escape any args that contain double quotes
+			$args = array_map(function($element) {
+
+				if(is_array($element)) {
+
+					return array(str_replace('"', '\"', current($element)));
+
+				} else {
+
+					return str_replace('"', '\"', $element);
+				}
+
+			}, array_filter($args, function($element) {
+
+				// Filter out any array elements that are also arrays
+				return !is_array($element);
+			}));
+
+			// Make sure the args array is not now an empty array (in case it was filtered above)
+			if (count($args) > 0) {
+
+				$toWrite .= ' "' . implode('" "', $args) . '"';
+			}
 		}
+
+		//Log::info( 'LxMPD runCommand toWrite', array($toWrite));
 
                 // Write command to MPD socket
                 $this->write( $toWrite );
 
 		// Set the timeout in seconds
-		$this->connection->setStreamTimeout( $timeout );		
+		$this->connection->setStreamTimeout( $timeout );
 
                 // Read the response from the MPD socket
                 $response = $this->read();
 
 		// Set the timeout in seconds
-		$this->connection->setStreamTimeout( $timeout );		
+		$this->connection->setStreamTimeout( $timeout );
+
+		//Log::info( 'LxMPD runCommand response', array($response));
+		//Log::info( 'LxMPD runCommand command', array($command));
+		//Log::info( 'LxMPD runCommand args', array($args));
 
                 // Return the parsed response array
                 return $this->parse( $response, $command, $args );
@@ -275,7 +361,7 @@ class LxMPD {
 			if( in_array( $command, $this->_responseShouldBeBoolean )) {
 
 				return $response;
-			
+
 			} else {
 
 				// If the command isn't expecting a boolean result, then we need to set the response back to an empty array
@@ -287,7 +373,7 @@ class LxMPD {
 		if( !count( $response ) ) {
 			return $parsed;
 		}
-	
+
 		switch( $command ) {
 
 			// This will parse out a list of something like artists or albums into a simple array of values
@@ -301,7 +387,7 @@ class LxMPD {
 					preg_match('/(.*?):\s(.*)/', $line, $matches);
 
 					if( count($matches) != 3 ) {
-			
+
 						continue;
 					}
 
@@ -333,7 +419,7 @@ class LxMPD {
 			// playlistinfo
 			// statistics
 			// stats
-			// idle	
+			// idle
 			default :
 
 				$items = array();
@@ -345,36 +431,36 @@ class LxMPD {
 
 					// Put the cleaned up matched pieces into the variables we'll be using
 					list( $subject, $key, $value ) = $matches;
-	
-					// The response output from certain commands like statistics and stats will never 
+
+					// The response output from certain commands like statistics and stats will never
 					// meet this condition, so therefore the items array will always be built as an
 					// associative array with key => value pairs.  The response output from commands
-					// like list, or list 
+					// like list, or list
 					if( array_key_exists( $key, $items ) ) {
 
 						// Append the track array onto the array of parsedOutput to be returned
 						$parsed[] = $items;
-						
+
 						// Initialize a new track to compile
 						$items = array( $key => $value );
-					
+
 					} else {
 
 						// Set the key value pair in the track array
 						$items[ $key ] = $value;
 					}
 				}
-			
+
 				if( in_array( $command, $this->_expectArrayOutput ) ) {
 
 					// Append the last items array onto the array of parsedOutput to return
 					$parsed[] = $items;
-				
+
 				} else {
 
 					$parsed = $items;
-				} 
-				
+				}
+
 				// If the output contains one or more tracks, then we can filter and report on missing tags if needed
 				if( in_array( $command, $this->_outputContainsTracks )) {
 
@@ -393,7 +479,7 @@ class LxMPD {
 
 				break;
 		}
-	
+
 		return false;
         }
 
@@ -402,35 +488,37 @@ class LxMPD {
 	 * NOTE: This function is automatically called upon Connect()
 	 */
 	public function refreshInfo() {
-        	
+
 		// Get the Server Statistics
-		$this->statistics = $this->stats();
-	
+		$this->statistics = $this->call('stats');
+
 		// Extract the statistics variables and store them as properties of the class instance
 		$this->uptime		= ( isset($this->statistics['uptime']) 		? $this->statistics['uptime'] : 	0  );
 		$this->playtime		= ( isset($this->statistics['playtime']) 	? $this->statistics['playtime'] : 	0  );
 		$this->artists		= ( isset($this->statistics['artists']) 	? $this->statistics['artists'] : 	0  );
 		$this->albums		= ( isset($this->statistics['albums']) 		? $this->statistics['albums'] : 	0  );
 		$this->songs		= ( isset($this->statistics['songs']) 		? $this->statistics['songs'] : 		0  );
-		$this->db_playtime	= ( isset($this->statistics['db_playtime']) 	? $this->statistics['db_playtime'] : 	0  );	
+		$this->db_playtime	= ( isset($this->statistics['db_playtime']) 	? $this->statistics['db_playtime'] : 	0  );
 		$this->db_update	= ( isset($this->statistics['db_update']) 	? $this->statistics['db_update'] : 	0  );
 
 		// Get the Server Status
-		$this->status = $this->status();
-        	
-		// Get the Playlist
-		$this->playlist = $this->playlistinfo();
+		$this->status = $this->call('status');
 
-		// Get a count of how many tracks are in the playlist    		
-		$this->playlist_count = count( $this->playlist );
+		Log::info('LxMPD->refreshInfo() - this->status', array($this->status));
+
+		// Get the Playlist
+		$this->playlist['tracks'] = $this->call('playlistinfo');
 
         	// Let's store the state for easy access as a property
 		$this->state = ( isset($this->status['state'] ) ? $this->status['state'] : 'stop' );
-		
+
 		// If the state is play or pause then we want to create some custom properties for easier access to certain stats
 		if ( ($this->state == "play") || ($this->state == "pause") ) {
 
 			$this->current_track_id = $this->status['song'];
+
+			Log::info('LxMPD->refreshInfo() - current_track_id', array($this->current_track_id));
+
 			list ($this->current_track_position, $this->current_track_length ) = explode(":", $this->status['time']);
 
 		} else {
@@ -460,22 +548,22 @@ class LxMPD {
 		$this->bitrate 		= ( isset($this->status['bitrate']) 		? $this->status['bitrate'] : 		0  );
 		$this->audio	 	= ( isset($this->status['audio']) 		? $this->status['audio'] : 		'' );
 	}
- 
+
 	/**
          * Excecuting the 'idle' function requires turning off timeouts, since it could take a long time
          * @param array $subsystems An array of particular subsystems to watch
          * @return string|array
          */
         public function idle( $subsystems = array() ) {
-                
-		return $this->runCommand( 'idle', $subsystems, 1800 );
+
+		return $this->runCommand( 'idle', $subsystems, 86400 );
         }
 
 	/**
 	 * GetFirstTrack gets the first track of an album
 	 * @param scope_key is to give scope to the find command
 	 * @param scope_value is the value of the scope
-	 * @return firstTrack 
+	 * @return firstTrack
 	 */
 	public function getFirstTrack( $scope_key = "album", $scope_value = null ) {
 
@@ -483,8 +571,8 @@ class LxMPD {
 	}
 
 	/**
-	 * getEssentialTags combines the essential ID3 as well as MPD-specific tags 
-	 * @return array  
+	 * getEssentialTags combines the essential ID3 as well as MPD-specific tags
+	 * @return array
 	 */
 	public function getEssentialTags() {
 
@@ -493,7 +581,7 @@ class LxMPD {
 	}
 
 	/**
-	 * reportOnMissingTags will find any tracks that are missing essentials tags and throws an exception 
+	 * reportOnMissingTags will find any tracks that are missing essentials tags and throws an exception
 	 * 	that contains enough information to track down the missing tags so the user can fill them in
 	 *	with the id3 editor of their choice
 	 * @param string $command is the command that was run which we want to pass through to the exception message
@@ -503,9 +591,9 @@ class LxMPD {
 	 */
 	public function reportOnMissingTags( $command, $tracks ) {
 
-		// getEssentialTags combines the essential ID3 as well as MPD-specific tags 
+		// getEssentialTags combines the essential ID3 as well as MPD-specific tags
 		$essentialTags = $this->getEssentialTags();
-	
+
 		// Loop through the tracks array so we can replace each track with a simple array of missing tags
 		$incompleteTracks = array_filter( array_map( function( $track ) use ( $essentialTags ) {
 
@@ -525,13 +613,13 @@ class LxMPD {
 
 		// If we have any tracks that are missing essential tags, then throw an exception to alert the user
 		if( count($incompleteTracks) ) {
-					
+
 			$detailedMessage = "";
 
-			// Loop through the incomplete tracks so we can retrieve more info about each track and build the exception message	
+			// Loop through the incomplete tracks so we can retrieve more info about each track and build the exception message
 			foreach( $incompleteTracks as $incompleteTrack ) {
-	
-				// Get the id from the incompleteTrack array	
+
+				// Get the id from the incompleteTrack array
 				$id = key($incompleteTrack);
 
 				// Retrieve more information about the track that's missing tags
@@ -554,7 +642,7 @@ class LxMPD {
 
 	public function filterOutUnwantedTags( $tracks ) {
 
-		// getEssentialTags combines the essential ID3 as well as MPD-specific tags 
+		// getEssentialTags combines the essential ID3 as well as MPD-specific tags
 		$essentialTags = $this->getEssentialTags();
 
 		// Loop through the tracks array so we can modify each track and filter out all but the essential tags
@@ -582,12 +670,309 @@ class LxMPD {
         }
 
 	/**
+         * Looks in the properties array for the given property and returns it.
+	 * If the property is not yet defined, then it returns null.
+         *
+         * @return mixed
+         */
+	public function get($name) {
+
+		if ( array_key_exists( $name, $this->_properties )) {
+			return $this->_properties[$name];
+
+		} else if ( isset($this->$name) ) {
+			return $this->$name;
+		}
+
+		return null;
+	}
+
+	/**
+         * Looks in the properties array for the given property and returns it.
+	 * If the property is not yet defined, then it returns null.
+         *
+	 * @param function
+	 *    The MPD function to call
+	 * @param args
+	 *    The string or array of arguments to pass into the function call
+	 *
+         * @return mixed
+         */
+	public function call($function, $arguments = array()) {
+
+                if( in_array( $function, $this->_methods ) ) {
+
+			Log::info( 'LxMPD call('.$function.')'.' with arguments...');
+			Log::info( 'LxMPD call() arguments', array($arguments));
+
+                        return $this->runCommand( $function, $arguments );
+                }
+	}
+
+	public function play($resume = true) {
+
+		Log::info('LxMPD->play',array(($resume ? 'with resume' : 'no resume')));
+
+		// Refresh the LxMPD instance with fresh statistics
+		$this->refreshInfo();
+
+		// Get the id of the current track or zero to start at the beginning
+		$trackId = $this->current_track_id ?: 0;
+
+		Log::info('LxMPD->play - trackId of current track', array($trackId));
+
+		$track = $this->getCurrentTrack();
+
+		// Set the position to the current_track_position if it's greater than zero
+		$position = $this->current_track_position ?: 0;
+
+		if (($position > 0) && $resume) { //&& ($this->state === "pause")) {
+
+			Log::info('LxMPD->play - resuming from', array($position));
+
+			// Seek to the position from which we should resume playing
+			$this->seekcur(intval($position));
+
+			// Unpause the track so it will continue playing from that point
+			$this->pause(0);
+
+			// Update the current track details to denote that we resumed from position
+			$track['seekTo'] = $position;
+
+                } else {
+
+			// Play the track from the start
+			$this->runCommand('play', $trackId);
+		}
+
+		// Return the track details array the caller will be updated on which track is now playing
+		return $track;
+	}
+
+	public function previous() {
+
+		$trackId = ($this->get('current_track_id') - 1);
+
+		if($trackId < 0) {
+
+			// Loop it around to the last track in the playlist
+			$trackId = (count($this->get('playlist')['tracks']) - 1);
+		}
+
+		$this->runCommand('play', $trackId );
+
+		return $this->getCurrentTrack();
+	}
+
+	public function next() {
+
+		$trackId = ($this->get('current_track_id') + 1);
+
+		if($trackId > (count($this->get('playlist')['tracks']) - 1)) {
+
+			// Loop it around to the beginning of the playlist
+			$trackId = 0;
+		}
+
+		$this->runCommand('play', $trackId );
+
+		return $this->getCurrentTrack();
+	}
+
+	public function skip($to) {
+
+		$this->runCommand('play', $to);
+
+		return $this->getCurrentTrack();
+	}
+
+	public function getCurrentTrack() {
+
+		// Refresh the LxMPD instance with fresh statistics
+		$this->refreshInfo();
+
+		$trackId = isset($this->current_track_id) ? $this->current_track_id : 0;
+
+		if (count($this->playlist['tracks']) > 0) {
+
+			if (array_key_exists($trackId, $this->playlist['tracks'])) {
+
+				// Get the details of the track to be played.
+				$track = $this->playlist['tracks'][$trackId];
+
+				//$track = $this->addSupplementaryTrackInfo($track);
+			}
+		}
+
+		// Return the track details or an empty array if there was nothing in the playlist
+		return (isset($track) ? $track : array());
+	}
+
+	public function getEnhancedPlaylist() {
+
+		// Refresh the LxMPD instance with fresh statistics
+		$this->refreshInfo();
+
+		// There are certain elements that every track should have - otherwise, we'll filter them out
+		$tags = $this->getEssentialTags();
+
+		// We don't seem to need the Id and Pos for anything but the current playlist
+		unset( $tags[ array_search( "Id", $tags ) ]);
+		unset( $tags[ array_search( "Pos", $tags ) ]);
+
+		// Filter out any bum track records
+		$this->playlist['tracks'] = array_filter($this->playlist['tracks'], function($track) use ($tags) {
+
+			return count( array_intersect( array_keys( $track ), $tags )) === count( $tags );
+		});
+
+		// Iterate over the entire array so we can add the supplemental track info to each item
+		$this->playlist['tracks'] = array_map( function($track, $index) {
+
+			return $this->enhanceTrackDetails($track, $index);
+
+		}, $this->playlist['tracks'], array_keys($this->playlist['tracks']));
+
+		$this->playlist['count'] = count($this->playlist['tracks']);
+
+		return $this->playlist;
+	}
+
+	public function enhanceTrackDetails($track, $index = null) {
+
+		Log::info('LxMPD->enhanceTrackDetails track', array($track));
+		Log::info('LxMPD->enhanceTrackDetails index', array($index));
+
+		if (strpos($track['file'], "http://") === 0) {
+
+			$station = DB::table('stations')->where('url_hash', hash('sha512', $track['file']))->where('creator_id', Auth::user()->id)->first();
+			$stationsIcon = StationsIcon::find($station->icon_id);
+
+			$track['Title'] = $station->name;
+			$track['Art'] = URL::to( $stationsIcon->baseurl . $stationsIcon->filename );
+			$track['length'] = $this->getTimerDisplay(0);
+
+		} else {
+
+			$track['Art'] = Request::root()."/".$this->getAlbumArt(	$track['file'], $track['Artist'], $track['Album'] );
+			$track['length'] = $this->getTimerDisplay($track['Time']);
+		}
+
+		Log::info('LxMPD->enhanceTrackDetails enhanced track', array($track));
+
+		return $track;
+	}
+
+	public function getAlbumArt( $filepath, $artist, $album ) {
+
+		Log::info('LxMPD->getAlbumArt filepath', array($filepath));
+		Log::info('LxMPD->getAlbumArt artist', array($artist));
+		Log::info('LxMPD->getAlbumArt album', array($album));
+
+		// Temporarily just use the default album art until we figure out how to get the user's config from here
+		//if ( !isset( $filepath )){
+
+			return Config::get('defaults.default_no_album_art_image');
+		//}
+
+		$music_dir = Config::get('user::music_dir');
+
+		Log::info('LxMPD->getAlbumArt music_dir', array($music_dir));
+
+		// The absolute path to the music file
+		$absolute_path = $music_dir . $filepath;
+
+		Log::info('LxMPD->getAlbumArt absolute_path', array($absolute_path));
+
+		// Generate a sha1 based on the artist and album names
+		$filename = sha1( $artist . " - " . $album );
+
+		// Concatenate the relative path to where the art file would be if it exists
+		$art_file = Config::get('user::art_dir') . $filename . '.jpeg';
+
+		// Concatenate the absoluate path to where the art file would be if it exists
+		$art_file_abs = Config::get('server::document_root') . $art_file;
+
+		// If no album art cache file exists yet, then create an album art cache file
+		if ( !File::exists( $art_file_abs )) {
+
+			try {
+				$id3 = LetID3::analyze($absolute_path);
+
+				$album_art_data = LetID3::getAlbumArtData($id3);
+
+				// If we weren't able to extract any album art data, then we have to use the default image
+				if ( !isset( $album_art_data )) {
+
+					$album_art_data = File::get( Config::get('server::document_root') . ltrim( Config::get('defaults::default_no_album_art_image')));
+				}
+
+				Image::make( $album_art_data )->resize( 64, 64 )->save( $art_file_abs, 70 );
+
+        		} catch (Exception $error) {
+
+				print($error->getMessage());
+        		}
+		}
+
+		return $art_file;
+	}
+
+	public function getTimerDisplay($timer_input) {
+
+		// Get a Carbon object composed of whatever today's date is (with 00:00:00 as H:m:s)
+		$pseudoTime = Carbon::today()->addSeconds($timer_input);
+
+		// Get the default display of the pseudoTime
+		$timerDisplay = $pseudoTime->toTimeString();
+
+		// Check to see if the hour property is 00
+		if( $pseudoTime->hour == "00" ) {
+
+			// We don't want to show hour if it's 00 since that will usually be the case
+			$timerDisplay = substr( $timerDisplay, ( strpos( $timerDisplay, ":" ) + 1 ), 5 ) ;
+		}
+
+		return $timerDisplay;
+		//return Carbon::today()->addSeconds($timer_input)->toTimeString();
+
+		$minutes = "-";
+		$seconds = "--";
+
+		if ((!isset($timer_input)) || ($timer_input === "Infinity") || ($timer_input === "")) {
+
+			return "∞";
+
+		} else {
+
+			if ($timer_input > 0) {
+
+				$minutes = floor($timer_input / 60);
+
+				$seconds = floor($timer_input % 60);
+
+				if ($seconds < 10) {
+
+					$seconds = "0" . $seconds;
+				}
+			}
+		}
+
+		return ($minutes.':'.$seconds);
+	}
+
+	public function toJson() {
+
+		return json_encode((array)$this);
+	}
+
+	/**
 	 * PHP magic methods __call(), __get(), __set(), __isset(), __unset()
 	 *
 	 */
- 
+
         public function __call( $name, $arguments ) {
-	
+
                 if( in_array( $name, $this->_methods ) ) {
                         return $this->runCommand( $name, $arguments );
                 }
@@ -605,7 +990,7 @@ class LxMPD {
 				' in ' . $trace[0]['file'] .
 				' on line ' . $trace[0]['line'],
 				E_USER_NOTICE	);
-		
+
 		return null;
 	}
 
