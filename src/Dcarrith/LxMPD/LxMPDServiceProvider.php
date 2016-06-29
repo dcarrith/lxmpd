@@ -17,18 +17,18 @@ class LxMPDServiceProvider extends ServiceProvider {
 	 */
 	protected $defer = false;
 
-        /**
-         * Bootstrap the application events.
-         *
-         * @return void
-         */
-        public function boot()
-        {
-                //$this->package('dcarrith/lxmpd');
-                $this->publishes(array(
-                        __DIR__.'/../../config/config.php' => config_path('lxmpd.php')
-                ));
-        }
+	/**
+	 * Bootstrap the application events.
+	 *
+	 * @return void
+	 */
+	public function boot()
+	{
+		//$this->package('dcarrith/lxmpd');
+		$this->publishes(array(
+			__DIR__.'/../../config/config.php' => config_path('lxmpd.php')
+		));
+	}
 
 	/**
 	 * Register the service provider.
@@ -39,18 +39,19 @@ class LxMPDServiceProvider extends ServiceProvider {
 	{
 		//$this->app['lxmpd'] = $this->app->share(function($app)
 		//{
-		$this->app->singleton('lxmpd', function()
+
+		$this->app->bind('lxmpd', function()
 		{
 			// These three calls to Log::info show the three different ways to access configs
-			Log::info( 'LxMPDServiceProvider', array('host' => Config::get('lxmpd::host')));
+			Log::info( 'LxMPDServiceProvider', array('host' => config('lxmpd.host')));
 			//Log::info( 'LxMPDServiceProvider', array('port' => $app['config']->get('lxmpd::port')));
 			//Log::info( 'LxMPDServiceProvider', array('password' => $app['config']['lxmpd::password']));
-			Log::info( 'LxMPDServiceProvider', array('port' => Config::get('lxmpd::port')));
-			Log::info( 'LxMPDServiceProvider', array('password' => Config::get('lxmpd::password')));
+			Log::info( 'LxMPDServiceProvider', array('port' => config('lxmpd.port')));
+			Log::info( 'LxMPDServiceProvider', array('password' => config('lxmpd.password')));
 
 			try {
 				// Instantiate a new MPDCOnnection object using the host, port and password set in configs
-				$connection = new MPDConnection( Config::get('lxmpd::host'), Config::get('lxmpd::port'), Config::get('lxmpd::password') );
+				$connection = new MPDConnection( config('lxmpd.host'), config('lxmpd.port'), config('lxmpd.password') );
 
 				// Determine if the connection to MPD is local to the Web Server
 				$connection->determineIfLocal();
@@ -75,7 +76,7 @@ class LxMPDServiceProvider extends ServiceProvider {
 				Log::info( 'LxMPDServiceProvider caught MPDConnectionException', array($e));
 
 				// Get the default path to the mpd binary from the project configuration
-				$binary = Config::get('defaults.default_path_to_mpd_binary');
+				$binary = config('defaults.default_path_to_mpd_binary');
 
 				Log::info( 'LxMPDServiceProvider default_path_to_mpd_binary', array($binary));
 
@@ -102,7 +103,7 @@ class LxMPDServiceProvider extends ServiceProvider {
 				while($starting = !($lxmpd->start($binary, $conf))) {}
 
 				// Instantiate a new MPDCOnnection object using the host, port and password set in configs
-				$connection = new MPDConnection( Config::get('lxmpd::host'), Config::get('lxmpd::port'), Config::get('lxmpd::password') );
+				$connection = new MPDConnection( config('lxmpd.host'), config('lxmpd.port'), config('lxmpd.password') );
 
 				// Determine if the connection to MPD is local to the Web Server
 				$connection->determineIfLocal();
